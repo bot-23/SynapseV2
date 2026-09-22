@@ -1,0 +1,2046 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Education Agent Copilot Backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/status": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Settings Status",
+        "operationId": "settings_status_api_v1_settings_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/apikey": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Save Api Key",
+        "operationId": "save_api_key_api_v1_settings_apikey_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/profile": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Get User Profile",
+        "operationId": "get_user_profile_api_v1_user_profile_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Save User Profile",
+        "operationId": "save_user_profile_api_v1_user_profile_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/data": {
+      "delete": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Delete All User Data",
+        "description": "删除当前用户的所有数据（画像、对话、进度、计划）。",
+        "operationId": "delete_all_user_data_api_v1_user_data_delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "List Conversations",
+        "operationId": "list_conversations_api_v1_conversations_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_dict__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}": {
+      "post": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Save Conversation",
+        "operationId": "save_conversation_api_v1_conversations__conversation_id__post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Delete Conversation",
+        "operationId": "delete_conversation_api_v1_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Get Messages",
+        "operationId": "get_messages_api_v1_conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_dict__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}": {
+      "post": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Save Message",
+        "operationId": "save_message_api_v1_conversations__conversation_id__messages__message_id__post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/study-plan": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Generate Study Plan",
+        "operationId": "generate_study_plan_api_v1_copilot_study_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudyPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_StudyPlanPayload_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/run": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Run Study Pilot",
+        "operationId": "run_study_pilot_api_v1_copilot_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudyPilotRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPilotRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/run/stream": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Run Study Pilot Stream",
+        "operationId": "run_study_pilot_stream_api_v1_copilot_run_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudyPilotRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/run/confirm": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Confirm Study Pilot",
+        "operationId": "confirm_study_pilot_api_v1_copilot_run_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudyPilotClarificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPilotRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/run/expand-blocks": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Expand Block Plan",
+        "operationId": "expand_block_plan_api_v1_copilot_run_expand_blocks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockPlanExpandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPilotRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/files/extract": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Extract Learning Files",
+        "operationId": "extract_learning_files_api_v1_copilot_files_extract_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_learning_files_api_v1_copilot_files_extract_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_FrontendAttachment__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/plan/save": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Save Plan",
+        "operationId": "save_plan_api_v1_copilot_plan_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/plan/current": {
+      "get": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Get Current Plan",
+        "operationId": "get_current_plan_api_v1_copilot_plan_current_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/plan/progress": {
+      "post": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Update Plan Progress",
+        "operationId": "update_plan_progress_api_v1_copilot_plan_progress_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanProgressUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copilot/knowledge-graph/summary": {
+      "get": {
+        "tags": [
+          "copilot"
+        ],
+        "summary": "Get Knowledge Graph Summary",
+        "operationId": "get_knowledge_graph_summary_api_v1_copilot_knowledge_graph_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiKeyRequest": {
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "title": "ApiKeyRequest"
+      },
+      "ApiResponse_StudyPlanPayload_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudyPlanPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[StudyPlanPayload]"
+      },
+      "ApiResponse_dict_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[dict]"
+      },
+      "ApiResponse_list_FrontendAttachment__": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrontendAttachment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[list[FrontendAttachment]]"
+      },
+      "ApiResponse_list_dict__": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse[list[dict]]"
+      },
+      "BlockItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "selectedIndex": {
+            "type": "integer",
+            "title": "Selectedindex",
+            "default": 0
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/BlockOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "options"
+        ],
+        "title": "BlockItem"
+      },
+      "BlockOption": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "duration": {
+            "type": "integer",
+            "title": "Duration"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "detail",
+          "duration"
+        ],
+        "title": "BlockOption"
+      },
+      "BlockPlan": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "day": {
+            "type": "string",
+            "title": "Day"
+          },
+          "limitMinutes": {
+            "type": "integer",
+            "title": "Limitminutes"
+          },
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/BlockItem"
+            },
+            "type": "array",
+            "title": "Blocks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "day",
+          "limitMinutes",
+          "blocks"
+        ],
+        "title": "BlockPlan"
+      },
+      "BlockPlanExpandRequest": {
+        "properties": {
+          "normalized": {
+            "$ref": "#/components/schemas/StudyPlanRequest"
+          },
+          "blockPlan": {
+            "$ref": "#/components/schemas/BlockPlan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "normalized",
+          "blockPlan"
+        ],
+        "title": "BlockPlanExpandRequest"
+      },
+      "Body_extract_learning_files_api_v1_copilot_files_extract_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_extract_learning_files_api_v1_copilot_files_extract_post"
+      },
+      "ClarificationAnswer": {
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "title": "Questionid"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "questionId",
+          "answer"
+        ],
+        "title": "ClarificationAnswer"
+      },
+      "ClarificationPrompt": {
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Sessionid"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/ClarificationQuestion"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessionId",
+          "title",
+          "description",
+          "questions"
+        ],
+        "title": "ClarificationPrompt"
+      },
+      "ClarificationQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder",
+            "default": ""
+          },
+          "suggestedAnswers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggestedanswers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "description"
+        ],
+        "title": "ClarificationQuestion"
+      },
+      "ConversationBody": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "新对话"
+          },
+          "planning_mode": {
+            "type": "string",
+            "title": "Planning Mode",
+            "default": "free"
+          }
+        },
+        "type": "object",
+        "title": "ConversationBody"
+      },
+      "FrontendAttachment": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": "未命名资料"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "extracted_text": {
+            "type": "string",
+            "title": "Extracted Text",
+            "default": ""
+          },
+          "text_excerpt": {
+            "type": "string",
+            "title": "Text Excerpt",
+            "default": ""
+          },
+          "extraction_status": {
+            "type": "string",
+            "title": "Extraction Status",
+            "default": "metadata_only"
+          },
+          "extraction_error": {
+            "type": "string",
+            "title": "Extraction Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "FrontendAttachment"
+      },
+      "FrontendMemory": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "FrontendMemory"
+      },
+      "FrontendUserProfile": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": "同学"
+          },
+          "grade": {
+            "type": "string",
+            "title": "Grade",
+            "default": "未填写"
+          }
+        },
+        "type": "object",
+        "title": "FrontendUserProfile"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MessageBody": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "user"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "default": ""
+          },
+          "attachments_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments Json"
+          },
+          "plan_data_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Data Json"
+          },
+          "request_context_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Context Json"
+          },
+          "response_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Mode"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "next_steps_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Steps Json"
+          },
+          "plan_confirmed": {
+            "type": "boolean",
+            "title": "Plan Confirmed",
+            "default": false
+          },
+          "expanded_to_week": {
+            "type": "boolean",
+            "title": "Expanded To Week",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "MessageBody"
+      },
+      "PlanProgressUpdateRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": "default"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id",
+            "default": ""
+          },
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id",
+            "default": ""
+          },
+          "plan_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Version"
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key"
+          },
+          "done": {
+            "type": "boolean",
+            "title": "Done"
+          },
+          "task_title": {
+            "type": "string",
+            "title": "Task Title",
+            "default": ""
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type",
+            "default": ""
+          },
+          "actual_minutes": {
+            "type": "integer",
+            "title": "Actual Minutes",
+            "default": 0
+          },
+          "plan_message": {
+            "type": "string",
+            "title": "Plan Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_key",
+          "done"
+        ],
+        "title": "PlanProgressUpdateRequest"
+      },
+      "ProfileRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          }
+        },
+        "type": "object",
+        "title": "ProfileRequest"
+      },
+      "SavePlanRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": "default"
+          },
+          "plan": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Plan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "title": "SavePlanRequest"
+      },
+      "StudyDayPlan": {
+        "properties": {
+          "day_index": {
+            "type": "integer",
+            "title": "Day Index"
+          },
+          "focus": {
+            "type": "string",
+            "title": "Focus"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/StudyTask"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "carry_over": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Carry Over"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_index",
+          "focus",
+          "tasks"
+        ],
+        "title": "StudyDayPlan"
+      },
+      "StudyPilotClarificationRequest": {
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Sessionid"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/ClarificationAnswer"
+            },
+            "type": "array",
+            "title": "Answers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessionId"
+        ],
+        "title": "StudyPilotClarificationRequest"
+      },
+      "StudyPilotRunRequest": {
+        "properties": {
+          "input": {
+            "type": "string",
+            "title": "Input",
+            "default": ""
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FrontendAttachment"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "userProfile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrontendUserProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrontendUserProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planningMode": {
+            "type": "string",
+            "enum": [
+              "free",
+              "blocks"
+            ],
+            "title": "Planningmode",
+            "default": "free"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "free",
+              "blocks"
+            ],
+            "title": "Mode",
+            "default": "free"
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/FrontendMemory"
+            },
+            "type": "array",
+            "title": "Memories"
+          }
+        },
+        "type": "object",
+        "title": "StudyPilotRunRequest"
+      },
+      "StudyPilotRunResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "maintenance",
+              "needs_clarification"
+            ],
+            "title": "Status",
+            "default": "ready"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "backend-live"
+          },
+          "request": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Request"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "followUp": {
+            "type": "string",
+            "title": "Followup"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          },
+          "next_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Next Steps"
+          },
+          "clarification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClarificationPrompt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blockPlan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudyPlanPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory_used": {
+            "items": {
+              "$ref": "#/components/schemas/FrontendMemory"
+            },
+            "type": "array",
+            "title": "Memory Used"
+          },
+          "memory_candidates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Memory Candidates"
+          },
+          "model_provider": {
+            "type": "string",
+            "title": "Model Provider",
+            "default": ""
+          },
+          "model_used": {
+            "type": "string",
+            "title": "Model Used",
+            "default": ""
+          },
+          "is_fallback": {
+            "type": "boolean",
+            "title": "Is Fallback",
+            "default": false
+          },
+          "error_message": {
+            "type": "string",
+            "title": "Error Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "request",
+          "message",
+          "followUp"
+        ],
+        "title": "StudyPilotRunResponse"
+      },
+      "StudyPlanPayload": {
+        "properties": {
+          "learner_profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Learner Profile"
+          },
+          "retrieved_context": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Retrieved Context"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStageResult"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "weekly_plan": {
+            "items": {
+              "$ref": "#/components/schemas/StudyDayPlan"
+            },
+            "type": "array",
+            "title": "Weekly Plan"
+          },
+          "final_message": {
+            "type": "string",
+            "title": "Final Message"
+          },
+          "next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Next Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "learner_profile",
+          "retrieved_context",
+          "stages",
+          "weekly_plan",
+          "final_message",
+          "next_actions"
+        ],
+        "title": "StudyPlanPayload"
+      },
+      "StudyPlanRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "用户唯一标识"
+          },
+          "current_level": {
+            "type": "string",
+            "title": "Current Level",
+            "description": "当前学习水平"
+          },
+          "learning_goal": {
+            "type": "string",
+            "title": "Learning Goal",
+            "description": "学习目标"
+          },
+          "available_days_per_week": {
+            "type": "integer",
+            "maximum": 7.0,
+            "minimum": 1.0,
+            "title": "Available Days Per Week"
+          },
+          "available_minutes_per_day": {
+            "type": "integer",
+            "maximum": 720.0,
+            "minimum": 15.0,
+            "title": "Available Minutes Per Day"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline",
+            "description": "目标截止时间"
+          },
+          "weak_points": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weak Points"
+          },
+          "preferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preferences"
+          },
+          "need_user_confirmation": {
+            "type": "boolean",
+            "title": "Need User Confirmation",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "current_level",
+          "learning_goal",
+          "available_days_per_week",
+          "available_minutes_per_day"
+        ],
+        "title": "StudyPlanRequest"
+      },
+      "StudyTask": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "task_type": {
+            "type": "string",
+            "enum": [
+              "learn",
+              "practice",
+              "review",
+              "mock_exam"
+            ],
+            "title": "Task Type"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "task_type",
+          "duration_minutes",
+          "reason"
+        ],
+        "title": "StudyTask"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkflowStageResult": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "done",
+              "needs_user_confirmation",
+              "fallback"
+            ],
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "status",
+          "summary"
+        ],
+        "title": "WorkflowStageResult"
+      }
+    }
+  }
+}

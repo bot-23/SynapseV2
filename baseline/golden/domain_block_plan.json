@@ -1,0 +1,573 @@
+{
+  "default": {
+    "title": "积木计划模式",
+    "description": "我先把 Day 1 拆成可替换的学习计划块，你可以逐块替换，不用整版重做。",
+    "day": "Day 1",
+    "limitMinutes": 90,
+    "blocks": [
+      {
+        "id": "diagnosis",
+        "label": "学习诊断",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "知识点快速诊断",
+            "detail": "围绕 积分、极限 先做小测，快速定位真正卡点。",
+            "duration": 15
+          },
+          {
+            "title": "错题回顾诊断",
+            "detail": "从最近错题或作业里找反复出错的题型。",
+            "duration": 20
+          }
+        ]
+      },
+      {
+        "id": "core-study",
+        "label": "核心学习",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "高等数学期末考试 核心概念集中复习",
+            "detail": "先把 高等数学期末考试 的定义、公式和典型思路过一遍。",
+            "duration": 43
+          },
+          {
+            "title": "教材例题精读",
+            "detail": "顺着 高等数学期末考试 的例题把解题链路重新走一遍，再标记卡住步骤。",
+            "duration": 48
+          },
+          {
+            "title": "专题视频与笔记",
+            "detail": "如果今天状态一般，就先用输入型学习块把 高等数学期末考试 思路补顺。",
+            "duration": 45
+          }
+        ]
+      },
+      {
+        "id": "practice",
+        "label": "练习巩固",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "高等数学期末考试 典型题限时训练",
+            "detail": "做一组题并记录卡住的步骤，先暴露真正不会的点。",
+            "duration": 22
+          },
+          {
+            "title": "分层习题训练",
+            "detail": "从 高等数学期末考试 基础题过渡到综合题，降低挫败感。",
+            "duration": 27
+          }
+        ]
+      },
+      {
+        "id": "review",
+        "label": "复盘收尾",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "十分钟学习复盘",
+            "detail": "写下今天的收获、卡点和明天第一件要做的事。",
+            "duration": 10
+          },
+          {
+            "title": "错题归档与复述",
+            "detail": "把错题按原因归类，再口头复述一遍关键方法。",
+            "duration": 15
+          }
+        ]
+      }
+    ]
+  },
+  "preferred": {
+    "title": "积木计划模式",
+    "description": "我先把 Day 1 拆成可替换的学习计划块，你可以逐块替换，不用整版重做。 已额外考虑你的时间约束：晚上只有 30 分钟。",
+    "day": "Day 1",
+    "limitMinutes": 90,
+    "blocks": [
+      {
+        "id": "diagnosis",
+        "label": "学习诊断",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "知识点快速诊断",
+            "detail": "围绕 积分、极限 先做小测，快速定位真正卡点。",
+            "duration": 15
+          },
+          {
+            "title": "错题回顾诊断",
+            "detail": "从最近错题或作业里找反复出错的题型。",
+            "duration": 20
+          }
+        ]
+      },
+      {
+        "id": "core-study",
+        "label": "核心学习",
+        "selectedIndex": 1,
+        "options": [
+          {
+            "title": "高等数学期末考试 核心概念集中复习",
+            "detail": "先把 高等数学期末考试 的定义、公式和典型思路过一遍。",
+            "duration": 43
+          },
+          {
+            "title": "教材例题精读",
+            "detail": "顺着 高等数学期末考试 的例题把解题链路重新走一遍，再标记卡住步骤。",
+            "duration": 48
+          },
+          {
+            "title": "专题视频与笔记",
+            "detail": "如果今天状态一般，就先用输入型学习块把 高等数学期末考试 思路补顺。",
+            "duration": 45
+          }
+        ]
+      },
+      {
+        "id": "practice",
+        "label": "练习巩固",
+        "selectedIndex": 1,
+        "options": [
+          {
+            "title": "高等数学期末考试 典型题限时训练",
+            "detail": "做一组题并记录卡住的步骤，先暴露真正不会的点。",
+            "duration": 22
+          },
+          {
+            "title": "分层习题训练",
+            "detail": "从 高等数学期末考试 基础题过渡到综合题，降低挫败感。",
+            "duration": 27
+          }
+        ]
+      },
+      {
+        "id": "review",
+        "label": "复盘收尾",
+        "selectedIndex": 1,
+        "options": [
+          {
+            "title": "十分钟学习复盘",
+            "detail": "写下今天的收获、卡点和明天第一件要做的事。",
+            "duration": 10
+          },
+          {
+            "title": "错题归档与复述",
+            "detail": "把错题按原因归类，再口头复述一遍关键方法。",
+            "duration": 15
+          }
+        ]
+      }
+    ]
+  },
+  "evidence": {
+    "title": "积木计划模式",
+    "description": "我先把 Day 1 拆成可替换的学习计划块，你可以逐块替换，不用整版重做。",
+    "day": "Day 1",
+    "limitMinutes": 90,
+    "blocks": [
+      {
+        "id": "diagnosis",
+        "label": "学习诊断",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "知识点快速诊断",
+            "detail": "围绕 积分、极限 先做小测，快速定位真正卡点。",
+            "duration": 15
+          },
+          {
+            "title": "错题回顾诊断",
+            "detail": "从最近错题或作业里找反复出错的题型。",
+            "duration": 20
+          }
+        ]
+      },
+      {
+        "id": "core-study",
+        "label": "核心学习",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "高等数学期末考试 核心概念集中复习",
+            "detail": "积分的换元法是本次考试重点",
+            "duration": 43
+          },
+          {
+            "title": "教材例题精读",
+            "detail": "顺着 高等数学期末考试 的例题把解题链路重新走一遍，再标记卡住步骤。",
+            "duration": 48
+          },
+          {
+            "title": "专题视频与笔记",
+            "detail": "如果今天状态一般，就先用输入型学习块把 高等数学期末考试 思路补顺。",
+            "duration": 45
+          }
+        ]
+      },
+      {
+        "id": "practice",
+        "label": "练习巩固",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "高等数学期末考试 典型题限时训练",
+            "detail": "做一组题并记录卡住的步骤，先暴露真正不会的点。",
+            "duration": 22
+          },
+          {
+            "title": "分层习题训练",
+            "detail": "从 高等数学期末考试 基础题过渡到综合题，降低挫败感。",
+            "duration": 27
+          }
+        ]
+      },
+      {
+        "id": "review",
+        "label": "复盘收尾",
+        "selectedIndex": 0,
+        "options": [
+          {
+            "title": "十分钟学习复盘",
+            "detail": "写下今天的收获、卡点和明天第一件要做的事。",
+            "duration": 10
+          },
+          {
+            "title": "错题归档与复述",
+            "detail": "把错题按原因归类，再口头复述一遍关键方法。",
+            "duration": 15
+          }
+        ]
+      }
+    ]
+  },
+  "expand_default": [
+    {
+      "day_index": 1,
+      "focus": "学习诊断 / 核心学习",
+      "tasks": [
+        {
+          "title": "知识点快速诊断",
+          "task_type": "practice",
+          "duration_minutes": 15,
+          "reason": "围绕 积分、极限 先做小测，快速定位真正卡点。"
+        },
+        {
+          "title": "高等数学期末考试 核心概念集中复习",
+          "task_type": "learn",
+          "duration_minutes": 43,
+          "reason": "先把 高等数学期末考试 的定义、公式和典型思路过一遍。"
+        },
+        {
+          "title": "高等数学期末考试 典型题限时训练",
+          "task_type": "practice",
+          "duration_minutes": 22,
+          "reason": "做一组题并记录卡住的步骤，先暴露真正不会的点。"
+        },
+        {
+          "title": "十分钟学习复盘",
+          "task_type": "review",
+          "duration_minutes": 10,
+          "reason": "写下今天的收获、卡点和明天第一件要做的事。"
+        }
+      ],
+      "carry_over": [
+        "知识点快速诊断",
+        "高等数学期末考试 核心概念集中复习",
+        "高等数学期末考试 典型题限时训练",
+        "十分钟学习复盘"
+      ]
+    },
+    {
+      "day_index": 2,
+      "focus": "承接 Day 1 · 概念压实 / 限时练习",
+      "tasks": [
+        {
+          "title": "把 高等数学期末考试 的核心概念重新口述一遍，再补 1 个容易混淆的小点",
+          "task_type": "learn",
+          "duration_minutes": 25,
+          "reason": "Day 1 如果偏概念梳理，后续就继续沿着概念 -> 练习的节奏推进。"
+        },
+        {
+          "title": "做一组 高等数学期末考试 典型题，先按正常节奏完成，再补 1 题限时重做",
+          "task_type": "practice",
+          "duration_minutes": 39,
+          "reason": "Day 1 选了典型题限时训练，后面就继续保留题感驱动的推进方式。"
+        },
+        {
+          "title": "用 10 分钟写下今天 高等数学期末考试 最清楚和最模糊的各 1 点",
+          "task_type": "review",
+          "duration_minutes": 18,
+          "reason": "轻复盘适合每天都做一点，能把节奏保持住。"
+        }
+      ],
+      "carry_over": [
+        "高等数学期末考试 核心概念集中复习",
+        "高等数学期末考试 典型题限时训练"
+      ]
+    },
+    {
+      "day_index": 3,
+      "focus": "卡点复查 · 快速复查 / 限时练习",
+      "tasks": [
+        {
+          "title": "先做一个 10 到 15 分钟的 高等数学期末考试 快速自测，看看 Day 1 的卡点有没有缓过来",
+          "task_type": "practice",
+          "duration_minutes": 18,
+          "reason": "Day 1 先做了快速诊断，Day 3 再回测一次，更容易看出补漏有没有起效。"
+        },
+        {
+          "title": "做一轮 高等数学期末考试 限时练习，重点看卡住时能不能自己把步骤接上",
+          "task_type": "practice",
+          "duration_minutes": 37,
+          "reason": "把时间压力稍微提起来，检查 Day 1 的诊断和练习有没有真正生效。"
+        },
+        {
+          "title": "用 10 分钟写下今天 高等数学期末考试 最清楚和最模糊的各 1 点",
+          "task_type": "review",
+          "duration_minutes": 19,
+          "reason": "轻复盘适合每天都做一点，能把节奏保持住。"
+        }
+      ],
+      "carry_over": [
+        "知识点快速诊断",
+        "高等数学期末考试 典型题限时训练",
+        "十分钟学习复盘"
+      ]
+    },
+    {
+      "day_index": 4,
+      "focus": "应用衔接 · 概念压实 / 限时练习",
+      "tasks": [
+        {
+          "title": "回看 高等数学期末考试 的定义、判定条件和最容易混淆的一处细节",
+          "task_type": "learn",
+          "duration_minutes": 19,
+          "reason": "在进入更综合的练习前，先把容易松动的概念再压实一遍。"
+        },
+        {
+          "title": "做一组偏综合的 高等数学期末考试 限时题，练稳定输出",
+          "task_type": "mock_exam",
+          "duration_minutes": 43,
+          "reason": "把前几天的节奏收拢成更接近实战的一轮练习。"
+        },
+        {
+          "title": "把 高等数学期末考试 今天暴露的 2 个卡点写成提醒卡片",
+          "task_type": "review",
+          "duration_minutes": 14,
+          "reason": "让 Day 5 的收口更聚焦，不用再从头翻整套内容。"
+        }
+      ],
+      "carry_over": [
+        "高等数学期末考试 核心概念集中复习",
+        "高等数学期末考试 典型题限时训练"
+      ]
+    },
+    {
+      "day_index": 5,
+      "focus": "收口检查 · 限时练习 / 轻量复盘",
+      "tasks": [
+        {
+          "title": "做一次 高等数学期末考试 的整体验收小测，尽量按正式节奏完成",
+          "task_type": "mock_exam",
+          "duration_minutes": 40,
+          "reason": "用一次完整检查确认这周沿着当前积木节奏推进后，薄弱点有没有真的收住。"
+        },
+        {
+          "title": "写一段 高等数学期末考试 本周复盘，记下最有用的方法和下周第一件事",
+          "task_type": "review",
+          "duration_minutes": 22,
+          "reason": "如果你偏轻复盘，这里就用更轻量但不断线的方式收口。"
+        }
+      ],
+      "carry_over": [
+        "高等数学期末考试 典型题限时训练",
+        "十分钟学习复盘"
+      ]
+    }
+  ],
+  "expand_alternate": [
+    {
+      "day_index": 1,
+      "focus": "学习诊断 / 核心学习",
+      "tasks": [
+        {
+          "title": "错题回顾诊断",
+          "task_type": "practice",
+          "duration_minutes": 20,
+          "reason": "从最近错题或作业里找反复出错的题型。"
+        },
+        {
+          "title": "教材例题精读",
+          "task_type": "learn",
+          "duration_minutes": 48,
+          "reason": "顺着 高等数学期末考试 的例题把解题链路重新走一遍，再标记卡住步骤。"
+        },
+        {
+          "title": "分层习题训练",
+          "task_type": "practice",
+          "duration_minutes": 27,
+          "reason": "从 高等数学期末考试 基础题过渡到综合题，降低挫败感。"
+        },
+        {
+          "title": "错题归档与复述",
+          "task_type": "review",
+          "duration_minutes": 15,
+          "reason": "把错题按原因归类，再口头复述一遍关键方法。"
+        }
+      ],
+      "carry_over": [
+        "错题回顾诊断",
+        "教材例题精读",
+        "分层习题训练",
+        "错题归档与复述"
+      ]
+    },
+    {
+      "day_index": 2,
+      "focus": "承接 Day 1 · 例题迁移 / 分层练习",
+      "tasks": [
+        {
+          "title": "重走 Day 1 的 高等数学期末考试 例题，并把关键步骤改写成自己的解题提示",
+          "task_type": "learn",
+          "duration_minutes": 25,
+          "reason": "你在 Day 1 选了例题精读，后续就顺着例题迁移，而不是突然切回纯概念灌输。"
+        },
+        {
+          "title": "完成 高等数学期末考试 的分层练习：先基础题，再过渡到 2 道变式题",
+          "task_type": "practice",
+          "duration_minutes": 39,
+          "reason": "你当前选的是分层习题训练，后续就保持由浅入深，不突然跳到一整套限时卷。"
+        },
+        {
+          "title": "把今天的 高等数学期末考试 错题按“不会/会但做错/粗心”分三类归档",
+          "task_type": "review",
+          "duration_minutes": 18,
+          "reason": "你已经选了错题归档与复述，后续复盘也继续围绕错因展开，不会断掉。"
+        }
+      ],
+      "carry_over": [
+        "教材例题精读",
+        "分层习题训练"
+      ]
+    },
+    {
+      "day_index": 3,
+      "focus": "卡点复查 · 错因复盘 / 分层练习",
+      "tasks": [
+        {
+          "title": "从这两天的 高等数学期末考试 错题里挑 3 题，确认到底是概念问题还是步骤问题",
+          "task_type": "practice",
+          "duration_minutes": 18,
+          "reason": "Day 1 用的是错题回顾诊断，后续检查也继续从真实错题出发。"
+        },
+        {
+          "title": "把 高等数学期末考试 分层练习往上推一档，专门处理昨天还不稳的那类题",
+          "task_type": "practice",
+          "duration_minutes": 37,
+          "reason": "继续沿着分层练习往上抬难度，比突然切到满负荷综合题更稳。"
+        },
+        {
+          "title": "挑 2 道最卡的 高等数学期末考试 题，口头复述正确做法和失误原因",
+          "task_type": "review",
+          "duration_minutes": 19,
+          "reason": "继续沿着错题复述这条线，把会错的地方真正讲明白。"
+        }
+      ],
+      "carry_over": [
+        "错题回顾诊断",
+        "分层习题训练",
+        "错题归档与复述"
+      ]
+    },
+    {
+      "day_index": 4,
+      "focus": "应用衔接 · 例题迁移 / 分层练习",
+      "tasks": [
+        {
+          "title": "从昨天做过的 高等数学期末考试 题里挑 2 题，反推它们对应的例题模型",
+          "task_type": "learn",
+          "duration_minutes": 19,
+          "reason": "先把例题模型和实际题目重新连起来，后面的综合练习会更顺。"
+        },
+        {
+          "title": "做一组偏综合的 高等数学期末考试 分层题，检查基础题和变式题能不能串起来",
+          "task_type": "practice",
+          "duration_minutes": 43,
+          "reason": "先保留分层节奏，再逐步接近综合应用。"
+        },
+        {
+          "title": "把 高等数学期末考试 今天暴露的 2 个卡点写成提醒卡片",
+          "task_type": "review",
+          "duration_minutes": 14,
+          "reason": "让 Day 5 的收口更聚焦，不用再从头翻整套内容。"
+        }
+      ],
+      "carry_over": [
+        "教材例题精读",
+        "分层习题训练"
+      ]
+    },
+    {
+      "day_index": 5,
+      "focus": "收口检查 · 分层练习 / 错因复盘",
+      "tasks": [
+        {
+          "title": "做一次 高等数学期末考试 的整体验收小测，尽量按正式节奏完成",
+          "task_type": "mock_exam",
+          "duration_minutes": 40,
+          "reason": "用一次完整检查确认这周沿着当前积木节奏推进后，薄弱点有没有真的收住。"
+        },
+        {
+          "title": "回看这周的 高等数学期末考试 错题归档，只保留最容易反复错的 3 条提醒",
+          "task_type": "review",
+          "duration_minutes": 22,
+          "reason": "收口阶段不再堆信息，只留下最值得你下次继续盯的点。"
+        }
+      ],
+      "carry_over": [
+        "分层习题训练",
+        "错题归档与复述"
+      ]
+    }
+  ],
+  "expand_single_day": [
+    {
+      "day_index": 1,
+      "focus": "学习诊断 / 核心学习",
+      "tasks": [
+        {
+          "title": "知识点快速诊断",
+          "task_type": "practice",
+          "duration_minutes": 15,
+          "reason": "围绕 积分、极限 先做小测，快速定位真正卡点。"
+        },
+        {
+          "title": "高等数学期末考试 核心概念集中复习",
+          "task_type": "learn",
+          "duration_minutes": 43,
+          "reason": "先把 高等数学期末考试 的定义、公式和典型思路过一遍。"
+        },
+        {
+          "title": "高等数学期末考试 典型题限时训练",
+          "task_type": "practice",
+          "duration_minutes": 22,
+          "reason": "做一组题并记录卡住的步骤，先暴露真正不会的点。"
+        },
+        {
+          "title": "十分钟学习复盘",
+          "task_type": "review",
+          "duration_minutes": 10,
+          "reason": "写下今天的收获、卡点和明天第一件要做的事。"
+        }
+      ],
+      "carry_over": [
+        "知识点快速诊断",
+        "高等数学期末考试 核心概念集中复习",
+        "高等数学期末考试 典型题限时训练",
+        "十分钟学习复盘"
+      ]
+    }
+  ]
+}

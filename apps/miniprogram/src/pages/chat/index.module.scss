@@ -1,0 +1,279 @@
+@use '@/styles/variables.scss' as *;
+
+/* 页面级滚动：不使用嵌套 scroll-view，避免快速滑动时卡死 */
+.page {
+  min-height: 100vh;
+  padding: 0 $page-padding;
+}
+
+.header {
+  padding: $spacing-lg 0 $spacing-sm;
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerTitleWrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.headerTitle {
+  display: block;
+  font-size: $font-size-xxl;
+  font-weight: $font-weight-bold;
+  color: $color-text-primary;
+}
+
+.headerSub {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.headerActions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.iconButton {
+  height: 56rpx;
+  padding: 0 $spacing-md;
+  margin-left: $spacing-xs;
+  background: $color-bg-card;
+  border-radius: $radius-button;
+  box-shadow: $shadow-card;
+  @include flex-center;
+  transition: opacity $transition-fast;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.iconButtonText {
+  font-size: $font-size-xs;
+  color: $color-primary;
+  white-space: nowrap;
+}
+
+.modeBadge {
+  display: inline-block;
+  margin-top: $spacing-sm;
+  background: rgba(0, 180, 42, 0.1);
+  border-radius: $radius-button;
+  padding: 4rpx 18rpx;
+}
+
+.modeBadgeFallback {
+  background: rgba(255, 125, 0, 0.12);
+}
+
+.modeBadgeText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.body {
+  padding-bottom: 200rpx; /* 预留底部输入栏高度，避免内容被遮挡 */
+}
+
+.welcome {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-xl $spacing-lg;
+  margin-top: $spacing-md;
+}
+
+.welcomeTitle {
+  display: block;
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.welcomeDesc {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+  margin-top: $spacing-sm;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-md;
+  padding: $spacing-md;
+  margin-top: $spacing-sm;
+  transition: all $transition-fast;
+
+  &:active {
+    opacity: 0.85;
+    border-color: $color-primary;
+  }
+}
+
+.suggestionText {
+  flex: 1;
+  min-width: 0;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+}
+
+.suggestionArrow {
+  flex-shrink: 0;
+  font-size: $font-size-lg;
+  color: $color-primary;
+  margin-left: $spacing-sm;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  margin-top: $spacing-md;
+}
+
+.rowUser {
+  align-items: flex-end;
+}
+
+.rowAssistant {
+  align-items: flex-start;
+}
+
+.bubble {
+  max-width: 86%;
+  border-radius: $radius-lg;
+  padding: $spacing-md $spacing-lg;
+}
+
+.bubbleUser {
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-bottom-right-radius: $radius-xs;
+}
+
+.bubbleAssistant {
+  background: $color-bg-card;
+  box-shadow: $shadow-card;
+  border-bottom-left-radius: $radius-xs;
+}
+
+.bubbleText {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  line-height: $line-height-loose;
+}
+
+.bubbleTextUser {
+  font-size: $font-size-md;
+  color: $color-text-white;
+  line-height: $line-height-loose;
+}
+
+.bottomSpacer {
+  height: $spacing-xl;
+}
+
+.inputBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  padding: $spacing-sm $page-padding calc(#{$spacing-sm} + env(safe-area-inset-bottom));
+  background: $color-bg-card;
+  box-shadow: $shadow-float;
+}
+
+/**
+ * H5 预览专用适配（小程序端不生效）。
+ * Taro 的 H5 构建会在视口底部自动渲染一个 tabBar（z-index 500），而本输入栏的
+ * z-index 被关在 .taro_page 这个 z-index 0 的堆叠上下文里，改 z-index 也压不过它，
+ * 只能把整条输入栏抬到 tabBar 之上（tabBar 高 50px）。
+ */
+.inputBarH5 {
+  /* 大写 PX 不会被 Taro 的 postcss-pxtransform 缩放；tabBar 是固定的 50px，
+     而小写 50px 在本工程会被换算成约 24px，仍然压不住 tabBar */
+  bottom: 50PX;
+
+  /* 同一原因：H5 下 Taro 的 Button 默认撑满整行，会把输入框挤成 0 宽而无法点击 */
+  .sendButton {
+    width: auto;
+  }
+}
+
+.modeToggle {
+  flex-shrink: 0;
+  display: flex;
+  background: $color-bg-page;
+  border-radius: $radius-button;
+  padding: 4rpx;
+  margin-right: $spacing-sm;
+}
+
+.modeChip {
+  padding: 8rpx 20rpx;
+  border-radius: $radius-button;
+}
+
+.modeChipActive {
+  background: $color-primary;
+}
+
+.modeChipText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.modeChipTextActive {
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  background: $color-bg-page;
+  border-radius: $radius-button;
+  padding: 0 $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.sendButton {
+  @include button-reset;
+  flex-shrink: 0;
+  min-width: 120rpx;
+  height: 72rpx;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  color: $color-text-white;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  margin-left: $spacing-sm;
+  transition: all $transition-base;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+
+  &[disabled] {
+    background: $color-text-disabled;
+  }
+}

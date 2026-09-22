@@ -1,0 +1,173 @@
+@use '@/styles/variables.scss' as *;
+
+.card {
+  width: 100%;
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-sm;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  transition: opacity $transition-fast;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.cardHeaderLeft {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  display: block;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.cardMeta {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.cardToggle {
+  flex-shrink: 0;
+  font-size: $font-size-sm;
+  color: $color-primary;
+  margin-left: $spacing-sm;
+  white-space: nowrap;
+}
+
+.changeSummary {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.08);
+  border-radius: $radius-xs;
+  padding: 6rpx 12rpx;
+  margin-top: $spacing-sm;
+}
+
+.cardMessage {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+  margin-top: $spacing-sm;
+}
+
+.dayBlock {
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: $spacing-md;
+  margin-top: $spacing-md;
+}
+
+.dayHeader {
+  display: flex;
+  align-items: center;
+}
+
+.dayIndex {
+  flex-shrink: 0;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.12);
+  border-radius: $radius-xs;
+  padding: 2rpx 12rpx;
+  margin-right: $spacing-sm;
+}
+
+.dayFocus {
+  flex: 1;
+  min-width: 0;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+  @include text-ellipsis;
+}
+
+.subjectGroup {
+  margin-top: $spacing-sm;
+}
+
+.subjectChip {
+  display: inline-block;
+  background: rgba(91, 108, 255, 0.1);
+  border-radius: $radius-xs;
+  padding: 2rpx 14rpx;
+  margin-bottom: 4rpx;
+}
+
+.chipText {
+  font-size: $font-size-xs;
+  color: $color-primary;
+  white-space: nowrap;
+}
+
+.taskRow {
+  display: flex;
+  align-items: flex-start;
+  padding: $spacing-xs 0;
+}
+
+.taskBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.taskTitle {
+  display: block;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+}
+
+.taskReason {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-normal;
+  margin-top: 2rpx;
+  @include text-ellipsis-multi(2);
+}
+
+.taskRight {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: $spacing-sm;
+}
+
+.taskType {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.taskMinutes {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 2rpx;
+  white-space: nowrap;
+}
+
+.cardHint {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: $spacing-md;
+  padding-top: $spacing-sm;
+  border-top: 1rpx solid $color-divider;
+}

@@ -1,0 +1,60 @@
+[
+  {
+    "name": "POST /copilot/plan/save",
+    "status_code": 200,
+    "json": {
+      "success": true,
+      "message": "计划已保存",
+      "data": {
+        "user_id": "default"
+      },
+      "timestamp": "<timestamp>"
+    }
+  },
+  {
+    "name": "GET /copilot/plan/current",
+    "status_code": 200,
+    "json": {
+      "success": true,
+      "message": "ok",
+      "data": {
+        "plan": {
+          "message": "基线计划",
+          "weekly_plan": [
+            {
+              "day_index": 1,
+              "focus": "基线焦点",
+              "tasks": [
+                {
+                  "title": "基线任务",
+                  "task_type": "learn",
+                  "duration_minutes": 45,
+                  "reason": "基线理由"
+                }
+              ],
+              "carry_over": []
+            }
+          ],
+          "block_plan": null,
+          "task_progress": {}
+        },
+        "user_id": "default"
+      },
+      "timestamp": "<timestamp>"
+    }
+  },
+  {
+    "name": "POST /copilot/plan/progress",
+    "status_code": 200,
+    "json": {
+      "success": true,
+      "message": "进度已更新",
+      "data": {
+        "task_progress": {
+          "day-1::task-0": true
+        }
+      },
+      "timestamp": "<timestamp>"
+    }
+  }
+]

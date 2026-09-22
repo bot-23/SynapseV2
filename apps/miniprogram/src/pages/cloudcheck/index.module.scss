@@ -1,0 +1,190 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  padding: $spacing-md $page-padding 0;
+}
+
+.card {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-md;
+}
+
+.cardTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.cardDesc {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+  margin-top: $spacing-sm;
+}
+
+.rowBetween {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.meta {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.statusRow {
+  margin-top: $spacing-md;
+  padding: $spacing-sm $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.statusOk {
+  font-size: $font-size-xs;
+  color: $color-success;
+  line-height: $line-height-normal;
+}
+
+.statusWarn {
+  font-size: $font-size-xs;
+  color: $color-warning;
+  line-height: $line-height-normal;
+}
+
+.attemptRow {
+  margin-top: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.attemptOk {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-success;
+}
+
+.attemptFail {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.attemptDetail {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-normal;
+  margin-top: 4rpx;
+  word-break: break-all;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  margin-top: $spacing-md;
+}
+
+.input {
+  width: 100%;
+  height: 80rpx;
+  background: $color-bg-page;
+  border-radius: $radius-button;
+  padding: 0 $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  box-sizing: border-box;
+  margin-top: $spacing-sm;
+}
+
+.primaryButton {
+  @include button-reset;
+  width: 100%;
+  height: $button-height-md;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  color: $color-text-white;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  margin-top: $spacing-md;
+
+  &:active {
+    opacity: 0.9;
+  }
+
+  &[disabled] {
+    background: $color-text-disabled;
+  }
+}
+
+.secondaryButton {
+  @include button-reset;
+  width: 100%;
+  height: $button-height-md;
+  background: $color-bg-page;
+  border-radius: $radius-button;
+  color: $color-text-secondary;
+  font-size: $font-size-md;
+  margin-top: $spacing-sm;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.buttonDisabled {
+  opacity: 0.6;
+}
+
+.verdict {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+}
+
+.verdictOk {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+  padding-left: $spacing-sm;
+  border-left: 4rpx solid $color-success;
+}
+
+.verdictFail {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-error;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+  padding-left: $spacing-sm;
+  border-left: 4rpx solid $color-error;
+}
+
+.rawBox {
+  margin-top: $spacing-sm;
+  padding: $spacing-sm;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.rawText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  word-break: break-all;
+}
+
+.bottomSpacer {
+  height: 120rpx;
+}

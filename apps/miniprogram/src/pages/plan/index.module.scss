@@ -1,0 +1,625 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  padding: $spacing-md $page-padding 0;
+}
+
+.empty {
+  margin-top: 120rpx;
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-xl $spacing-lg;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.emptyTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.emptyDesc {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+  text-align: center;
+  margin-top: $spacing-sm;
+}
+
+.emptyButton {
+  margin-top: $spacing-lg;
+  height: $button-height-md;
+  padding: 0 $spacing-xl;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  @include flex-center;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.emptyButtonText {
+  font-size: $font-size-md;
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}
+
+.summary {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+}
+
+.summaryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.summaryTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.versionBadge {
+  background: rgba(91, 108, 255, 0.12);
+  border-radius: $radius-xs;
+  padding: 2rpx 14rpx;
+}
+
+.versionText {
+  font-size: $font-size-xs;
+  color: $color-primary;
+  white-space: nowrap;
+}
+
+.changeSummary {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.08);
+  border-radius: $radius-xs;
+  padding: 6rpx 12rpx;
+  margin-top: $spacing-sm;
+}
+
+.summaryMessage {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+  @include text-ellipsis-multi(3);
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-md;
+}
+
+.progressBar {
+  flex: 1;
+  height: 12rpx;
+  background: $color-bg-page;
+  border-radius: $radius-round;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-round;
+  transition: width $transition-base;
+}
+
+.progressText {
+  flex-shrink: 0;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  margin-left: $spacing-md;
+  white-space: nowrap;
+}
+
+.updatedAt {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: $spacing-xs;
+}
+
+.subjectFilter {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-md;
+}
+
+.subjectChip {
+  background: $color-bg-card;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-button;
+  padding: 8rpx 24rpx;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  transition: all $transition-fast;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.subjectChipActive {
+  background: $color-primary;
+  border-color: $color-primary;
+}
+
+.subjectChipText {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.subjectChipTextActive {
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}
+
+.dayCard {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-md;
+}
+
+.dayHeader {
+  display: flex;
+  align-items: center;
+}
+
+.dayIndex {
+  flex-shrink: 0;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.12);
+  border-radius: $radius-xs;
+  padding: 2rpx 12rpx;
+  margin-right: $spacing-sm;
+}
+
+.dayFocus {
+  flex: 1;
+  min-width: 0;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+  @include text-ellipsis;
+}
+
+.subjectGroup {
+  margin-top: $spacing-md;
+}
+
+.groupChip {
+  display: inline-block;
+  background: $color-bg-page;
+  border-radius: $radius-xs;
+  padding: 2rpx 14rpx;
+  margin-bottom: $spacing-xs;
+}
+
+.groupChipText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  padding: $spacing-sm 0;
+  transition: opacity $transition-fast;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.checkbox {
+  flex-shrink: 0;
+  width: 40rpx;
+  height: 40rpx;
+  border: 2rpx solid $color-border;
+  border-radius: $radius-round;
+  margin-right: $spacing-md;
+  @include flex-center;
+}
+
+.checkboxDone {
+  background: $color-primary;
+  border-color: $color-primary;
+}
+
+.checkMark {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+}
+
+.taskBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.taskTitle {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+}
+
+.taskTitleDone {
+  color: $color-text-tertiary;
+  text-decoration: line-through;
+}
+
+.taskMeta {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.bottomSpacer {
+  height: 120rpx;
+}
+
+/* 历史版本：每一版都留档，可回到某一版继续 */
+.versionCard {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-md;
+}
+
+.versionTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.versionHint {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+}
+
+.versionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.versionInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.versionName {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+}
+
+.versionMeta {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.versionAction {
+  flex-shrink: 0;
+  padding: 6rpx $spacing-md;
+  border-radius: $radius-button;
+  border: 1rpx solid $color-primary;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.versionActionText {
+  font-size: $font-size-xs;
+  color: $color-primary;
+  white-space: nowrap;
+}
+
+.versionCurrent {
+  flex-shrink: 0;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+/* 三个 tab：今日（待办）/ 短期（本期周计划）/ 长期（阶段） */
+.tabs {
+  display: flex;
+  background: $color-bg-card;
+  border-radius: $radius-button;
+  padding: 4rpx;
+  margin-bottom: $spacing-md;
+}
+
+.tab {
+  flex: 1;
+  height: 64rpx;
+  border-radius: $radius-button;
+  @include flex-center;
+  transition: background $transition-fast;
+}
+
+.tabActive {
+  background: $color-primary;
+}
+
+.tabText {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.tabTextActive {
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}
+
+.todayEmpty {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-md;
+}
+
+.removeButton {
+  flex-shrink: 0;
+  padding: 4rpx $spacing-md;
+  margin-left: $spacing-sm;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.removeButtonText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  white-space: nowrap;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-md;
+}
+
+.addInput {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  background: $color-bg-card;
+  border-radius: $radius-button;
+  padding: 0 $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  margin-top: $spacing-sm;
+}
+
+.addRow .addInput {
+  margin-top: 0;
+}
+
+.addButton {
+  @include button-reset;
+  width: auto;
+  flex-shrink: 0;
+  min-width: 140rpx;
+  height: 72rpx;
+  padding: 0 $spacing-lg;
+  margin-top: $spacing-md;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  color: $color-text-white;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+
+  &:active {
+    opacity: 0.9;
+  }
+
+  &[disabled] {
+    background: $color-text-disabled;
+  }
+}
+
+.addRow .addButton {
+  margin-top: 0;
+  margin-left: $spacing-sm;
+}
+
+.buttonDisabled {
+  opacity: 0.6;
+}
+
+/* 长期阶段卡片 */
+.milestoneCard {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-md;
+  border-left: 6rpx solid $color-border;
+}
+
+.milestoneActive {
+  border-left-color: $color-primary;
+}
+
+.milestoneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.milestoneTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.milestoneStatus {
+  flex-shrink: 0;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.milestoneMeta {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.milestoneGoal {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+}
+
+.milestoneAcceptance {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-xs;
+}
+
+.milestoneActions {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-md;
+}
+
+/* 复习队列（间隔重复） */
+.reviewSection {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-top: $spacing-md;
+}
+
+.reviewSectionTitle {
+  display: block;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.reviewEmpty {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-sm;
+}
+
+.reviewRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.reviewInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.reviewTopic {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+}
+
+.reviewMeta {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.reviewActions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-left: $spacing-sm;
+}
+
+.reviewPass {
+  padding: 6rpx $spacing-md;
+  border-radius: $radius-button;
+  background: $color-primary;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.reviewFail {
+  padding: 6rpx $spacing-md;
+  margin-left: $spacing-xs;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.reviewActionTextLight {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+  white-space: nowrap;
+}
+
+.reviewActionTextDark {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}

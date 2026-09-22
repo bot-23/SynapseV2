@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "module": "commonjs",
+    "removeComments": false,
+    "preserveConstEnums": true,
+    "moduleResolution": "node",
+    "experimentalDecorators": true,
+    "noImplicitAny": false,
+    "allowSyntheticDefaultImports": true,
+    "outDir": "lib",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "strictNullChecks": true,
+    "sourceMap": true,
+    "baseUrl": "",
+    "rootDir": "",
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "typeRoots": ["node_modules/@types"],
+    // 以下两项是为了让 src/vendor/core（core 的生成副本）在这个工程里也能通过类型检查。
+    // 它本身的编译选项见 packages/core/tsconfig.json：lib ES2022 + noUncheckedIndexedAccess。
+    // 配置不一致会出现「同一份代码在 core 里没事、在壳里报错」，而 vendor 是生成物不能改。
+    "lib": ["ES2022", "DOM"],
+    "noUncheckedIndexedAccess": true,
+    // Taro 4.1.9 自带的类型包有若干缺陷（缺 react-native 类型、缺 CommonEventFunction、
+    // 重复标识符等），不跳过就会报几十个与业务无关的错误，让 tsc 没法当门禁用。
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src", "types"],
+  "compileOnSave": false
+}
