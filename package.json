@@ -1,0 +1,19 @@
+{
+  "name": "synapse-next",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "sync:core": "node scripts/sync-core-to-miniprogram.mjs && node scripts/check-vendor-imports.mjs",
+    "check:vendor": "node scripts/check-vendor-imports.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

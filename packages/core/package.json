@@ -1,0 +1,16 @@
+{
+  "name": "@synapse/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "平台无关核心：协议契约 + 纯计算 domain + 用例编排（零运行时依赖）",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol/index.ts",
+    "./domain": "./src/domain/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  }
+}
