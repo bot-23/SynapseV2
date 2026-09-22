@@ -205,6 +205,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 ## 8. 常用脚本
 
 ```bash
+npm install                           # 拉依赖（node_modules 不入库，clone 后必跑）
 npm test                              # 全仓测试（65 个）
 npm run typecheck                     # 全仓类型检查（core + 小程序壳）
 npm run sync:core                     # core → 小程序 vendor（增量覆盖 + 校验）
