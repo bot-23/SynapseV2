@@ -6,13 +6,200 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 
 ---
 
+## 当前状态
+
+这是一个**可运行的微信小程序版本**，核心学习规划链路、离线规则模式、本地资料检索、课程表避让、三层计划和复习闭环已经落地。Web、桌面和 Android 仍只有架构规划，没有对应应用壳。
+
+状态口径：
+
+| 标记 | 含义 |
+| --- | --- |
+| ✅ 已实现 | 已有可调用代码与界面，并通过当前自动化测试或预览验证 |
+| 🧪 实验性 | 已有独立验证入口，但尚未接入正式业务主链路 |
+| 🧩 接口已留 | core 已定义端口或协议，平台实现尚未接入 |
+| ⏳ 未实现 | 当前仓库没有可交付实现 |
+
+最近一次验证结果：
+
+- core 单元测试、黄金样本与边界测试：**69/69 通过**
+- core 与小程序 TypeScript 类型检查：通过
+- vendor 导入边界：通过（core 对外导出 141 个，检查 31 个壳文件）
+- H5 预览构建与渲染：通过，控制台无运行时错误
+- 真实中文 TXT：导入后切出 1 段，能在离线计划的消息、理由和 Day 1 任务中引用资料名
+
+> 自动化测试覆盖 core 行为，不等于所有微信原生交互都已真机验收。`chooseMessageFile`、网络合法域名、云开发 AI 等仍受微信运行环境影响。
+
+---
+
+## 功能全景
+
+### 用户可直接使用
+
+| 模块 | 状态 | 当前实现 |
+| --- | --- | --- |
+| 首次引导 | ✅ | 填写并真实校验 DeepSeek API Key；也可跳过，直接进入本地规则模式 |
+| AI 对话 | ✅ | 多轮会话、会话隔离、新建/切换/删除历史会话、失败后保留输入 |
+| 意图编排 | ✅ | 区分闲聊、澄清、制定计划、微调计划、重做计划、教学答疑、记忆用户信息 |
+| 澄清问答 | ✅ | 信息不足时生成可点击选项；提交后继续同一轮计划流程 |
+| 自由计划 | ✅ | 根据目标、薄弱点、可用时间、截止日期生成按天任务 |
+| 积木计划 | ✅ | 先生成 Day 1 可替换积木，再展开成一周计划 |
+| 离线规则计划 | ✅ | 未配置 Key 或模型不可达时仍能生成可执行计划，并明确提示降级原因 |
+| 多科目计划 | ✅ | 自动识别科目、按科目分别排程，再合并到每日时间预算 |
+| 中途追加科目 | ✅ | 只占用未来日期的剩余预算，不重排旧任务，不破坏已有打卡 |
+| 计划微调 | ✅ | 支持“太难”“压缩到 30 分钟”“多加练习”等局部调整 |
+| 计划版本 | ✅ | 最多保留 30 版，可恢复历史版本；恢复会生成新版本，打卡记录保留 |
+| 今日待办 | ✅ | 从短期计划按日期切片，可手动加/移出任务，未完成项跨天顺延 |
+| 长期计划 | ✅ | 跨度超过一周时生成里程碑，也可手动输入目标和截止日期划分阶段 |
+| 阶段转短期计划 | ✅ | 可选择长期计划中的某个里程碑，重新生成本周计划 |
+| 复习队列 | ✅ | 完成学习任务自动入队；按 SM-2 安排到期复习，也可手动添加知识点 |
+| 课程表 | ✅ | 支持粘贴文本解析、手动录入、逐条校正；计划按空闲时间压缩任务量 |
+| 资料库 | ✅ | 支持粘贴文本、从微信聊天记录选择 `.txt`、2MB 限制、中文解码、切片与删除 |
+| 本地检索 | ✅ | BM25 + 中文相邻双字索引；资料、画像、执行记录、课程表、知识图谱统一进入上下文预算 |
+| 资料证据 | ✅ | 命中资料后，计划消息、理由、首个任务和计划卡片显示资料名与来源摘要 |
+| 教学答疑检索 | ✅ | 教学问题命中资料时，将文件名和片段加入提示词；没有资料时保持旧提示词 |
+| AI 内容标识 | ✅ | AI 消息与计划卡片显示“AI 生成”；资料命中时显示“依据：你的资料《X》” |
+| 用户画像 | ✅ | 本地保存姓名、年级；姓名首次设定后锁定 |
+| 科目注册表 | ✅ | 对话识别出的科目跨会话保留，识别错误可在“我的”页删除 |
+| 数据清理 | ✅ | 一键清空画像、计划、进度、课程表、资料与 API Key |
+| 知识图谱 | ✅ | 内置 9 个节点、10 条边，为计划提供相关节点和学习路径建议 |
+
+### 页面清单
+
+| 页面 | 路由 | 类型 | 能力 |
+| --- | --- | --- | --- |
+| 首次引导 | `pages/onboarding/index` | 启动页 | Key 校验、跳过并使用本地规则模式 |
+| 对话 | `pages/chat/index` | Tab | 多轮对话、自由/积木模式、澄清卡片、计划卡片、AI 标识 |
+| 计划 | `pages/plan/index` | Tab | 今日、短期、长期、复习四个视图 |
+| 我的 | `pages/mine/index` | Tab | 画像、科目、Key、课程表、资料库、知识图谱、数据清理入口 |
+| 历史会话 | `pages/conversations/index` | 二级页 | 新建、切换、长按删除会话 |
+| 课程表 | `pages/timetable/index` | 二级页 | 文本解析、手动录入、校正、保存 |
+| 资料库 | `pages/documents/index` | 二级页 | 粘贴或选择 TXT、查看切片摘要、删除 |
+| 云开发 AI 自检 | `pages/cloudcheck/index` | 实验页 | 探测 provider/model、思考模式、工具调用、JSON mode、流式输出 |
+
+### 已实现但有边界
+
+| 能力 | 当前边界 |
+| --- | --- |
+| 资料格式 | UI 只开放 `.txt`；core 能识别 PDF，但小程序没有注入 PDF 提取器 |
+| 中文编码 | TXT 按 UTF-8 → GBK → GB2312 尝试；最终退回 UTF-8 宽松解码 |
+| 资料长度 | 单文件界面限制 2MB；core 每个附件最多保留 6000 字用于当前提取结果 |
+| 检索方式 | 端侧 BM25 词法检索，不做 embedding；问题与资料没有字面重叠时不会命中 |
+| “资料未覆盖”提示 | 有命中片段时提示词要求模型不得补写；完全未命中时为保护冻结基线，仍沿用旧教学提示词 |
+| 模型服务 | 正式主链路只接 DeepSeek 直连；Key 保存在本机 KV 中，没有服务端代管 |
+| 云开发 AI | 只有能力自检页，尚未成为正式 `LlmProvider`，不会替代 DeepSeek 主链路 |
+| 流式输出 | core 和 DeepSeek provider 已有流式接口与 SSE 测试；聊天 UI 当前仍等待整条响应 |
+| 数据容量 | 微信本地存储通常约 10MB；尚无自动归档、跨设备同步或云端备份 |
+| 平台范围 | 目前交付的是 Taro 微信小程序；支付宝/抖音依赖已存在，但未做完整平台验收 |
+
+---
+
+## 尚未实现
+
+以下内容不要从接口名或实验页面误判为已经交付：
+
+| 能力 | 状态 | 缺口 |
+| --- | --- | --- |
+| PDF 导入 | 🧩 | `FileExtractor` 端口和 `.pdf` 分发已存在，小程序未接 pdf.js，也没有 PDF 选择入口 |
+| 聊天附件 | ⏳ | 聊天请求仍固定 `files: []`；资料只能先在资料库导入 |
+| 图片/OCR/Word/Markdown | ⏳ | 没有解析器与 UI 入口 |
+| 聊天流式打字机 | 🧩 | core 有 `runStream`，壳未消费流事件 |
+| 推送提醒 | 🧩 | `NotifierProvider` 当前是 mock，没有订阅消息或系统通知实现 |
+| 真实日历同步 | 🧩 | `CalendarProvider` 当前只做截止日期提示，没有系统日历读写 |
+| 云开发 AI 正式接入 | 🧪 | 自检页只验证能力；尚未实现 Provider、配置切换与回归测试 |
+| 用户账号与登录 | ⏳ | 当前固定本地用户 `default`，没有微信登录、账号体系或多用户切换 |
+| 跨设备同步/云备份 | ⏳ | 全部业务数据仅在当前设备 KV 中 |
+| 数据导出/导入 | ⏳ | 没有 JSON/ZIP 备份恢复入口 |
+| Web 应用 | ⏳ | `apps/web` 尚未创建 |
+| 桌面应用 | ⏳ | Tauri 壳、文件系统 KV 适配器和旧 SQLite 迁移器尚未实现 |
+| Android 应用 | ⏳ | Tauri Mobile / Kotlin 薄壳均未实现 |
+| HTTP/SSE 服务端 | ⏳ | 协议可映射为 HTTP，但当前只有进程内调用，不提供服务器 |
+| 向量检索 | ⏳ | 没有 embedding 模型、向量库或语义召回 |
+| UI 自动化测试 | ⏳ | 当前测试集中在 core；页面交互主要靠类型检查和预览冒烟 |
+
+---
+
+## 可扩展与可替换
+
+core 通过接口而不是平台全局 API 获取外部能力。替换实现时，优先实现端口并在壳的组装处注入，不要把平台代码写进 `packages/core`。
+
+| 扩展点 | 当前实现 | 可以替换为 | 主要位置 |
+| --- | --- | --- | --- |
+| LLM | `DeepSeekLlmProvider` / 离线规则 provider | 其他 OpenAI 兼容模型、云开发 AI、本地模型 | `providers/contracts.ts`、`providers/build.ts` |
+| 网络 | 小程序 `Taro.request` | Web `fetch`、Tauri HTTP、Node HTTP | `ports/HttpTransport` |
+| 流式传输 | DeepSeek SSE 协议 | 小程序 chunked、Web SSE、WebSocket | `ports/StreamTransport` |
+| 存储 | 小程序 `Taro.storage` KV | IndexedDB、Tauri fs、SQLite、云 KV | `storage/kv.ts`、壳 `adapters/` |
+| 资料提取 | core 内置 TXT 解码 | 注入 pdf.js、OCR、Office 转文本 | `ports/FileExtractor`、`application/fileExtract.ts` |
+| 检索 | 本地知识图谱 + BM25 | embedding、远程搜索、混合排序 | `RetrievalProvider`、`domain/bm25.ts` |
+| 日历 | mock 截止日期提示 | 系统日历、课程平台 API | `CalendarProvider` |
+| 通知 | mock 文案 | 微信订阅消息、系统通知 | `NotifierProvider` |
+| 时间与 ID | 小程序真实时间 + UUID v4 风格随机 ID | 服务端时间、确定性 ID、平台安全随机源 | `ports/Clock`、`ports/IdGen` |
+| UI 壳 | Taro 微信小程序 | React Web、Tauri、Tauri Mobile/Kotlin WebView | 新建 `apps/*`，复用 `@synapse/core` |
+
+### 扩展新模型
+
+实现 `LlmProvider` 的五个方法：
+
+```ts
+interface LlmProvider {
+  generateText(prompt: string): Promise<string>
+  generateWithTools(prompt: string, tools: unknown[], forceTool?: string): Promise<GenerateWithToolsResult>
+  generateJson(prompt: string): Promise<Record<string, unknown>>
+  streamText(prompt: string): AsyncIterable<string>
+  describe(): Record<string, unknown>
+}
+```
+
+然后在 `buildProviderBundle` 或平台组装处选择新实现。只要保持工具调用、JSON 输出和错误语义一致，工作流与 UI 不需要重写。
+
+### 扩展新平台
+
+最小工作量是：
+
+1. 实现 `KvStore`、`HttpTransport`、`StreamTransport`、`Clock`、`IdGen`。
+2. 如需 PDF，再实现 `FileExtractor`。
+3. 调用 `createSynapseCore(...)` 完成依赖注入。
+4. 新壳只负责页面、路由、文件选择、生命周期和平台权限。
+5. 使用同一份协议类型与 core 测试，不复制业务算法。
+
+### 替换检索策略
+
+当前资料检索固定输出：
+
+```text
+资料命中[文件名]: 片段
+```
+
+上下文分类、来源摘要和资料证据都依赖这个格式。可以替换 BM25 的内部打分，也可以实现新的 `RetrievalProvider`，但在迁移协议前应保持该文本格式与 `retrieved_context: string[]` 不变。
+
+---
+
+## 快速开始
+
+```bash
+git clone https://github.com/bot-23/SynapseV2.git
+cd SynapseV2
+npm install
+npm run sync:core
+npm test
+npm run typecheck
+```
+
+关键约定：
+
+- `packages/core/src/` 是核心唯一事实来源。
+- `apps/miniprogram/src/vendor/core/` 是同步生成物，**不要手改**。
+- 修改 core 后运行 `npm run sync:core`，再跑测试和类型检查。
+- `node_modules/`、构建产物、本地凭据、`.pai/`、`trae-tasks.md` 与本地测试资料不会进入 Git。
+
+---
+
 ## 1. 技术栈总览
 
 | 位置 | 技术 | 版本 | 说明 |
 | --- | --- | --- | --- |
 | 语言 | TypeScript | ^5.6（strict） | 全仓库唯一语言 |
 | 包管理 | npm workspaces | — | monorepo，`packages/*` + `apps/*` |
-| 测试 | Vitest | ^3.0 | 65 个测试，含黄金样本回放 |
+| 测试 | Vitest | ^3.0 | 69 个测试，含黄金样本回放 |
 | 核心 | 纯 TypeScript | — | `@synapse/core`，**零运行时依赖** |
 | 小程序壳 | Taro | 4.1.9 | React 18 + SCSS Modules，微信小程序为主 |
 | UI | React | ^18 | 函数组件 + Hooks |
@@ -40,14 +227,14 @@ SynapseNext/
 │       │   ├── ports/            # 端口定义：core 访问平台的唯一出口
 │       │   ├── providers/        # LLM / 检索 / 日历 / 通知 适配器
 │       │   └── storage/          # KV 之上的运行时存储（含键空间）
-│       └── test/                 # 5 个测试文件，65 个用例
+│       └── test/                 # 5 个测试文件，69 个用例
 ├── apps/
 │   └── miniprogram/              # Taro 壳（当前唯一已交付的壳）
 │       └── src/
 │           ├── adapters/         # 端口实现：HttpTransport / KvStore
 │           ├── vendor/core/      # core 的同步副本（脚本生成，勿手改）
-│           ├── pages/            # 7 个页面
-│           ├── components/       # 卡片组件
+│           ├── pages/            # 8 个页面（3 个 Tab + 5 个启动/二级/实验页）
+│           ├── components/       # 计划、积木计划、澄清卡片
 │           └── services/         # 壳侧封装，对接 vendor/core
 ├── baseline/                     # 旧 Python 行为的冻结基线（黄金样本）
 └── scripts/                      # sync-core-to-miniprogram / check-vendor-imports
@@ -86,12 +273,12 @@ core 只声明接口，由壳注入实现（[ports/index.ts](packages/core/src/p
 | --- | --- | --- |
 | `HttpTransport` | 普通 HTTP 请求 | `Taro.request`（包 `wx.request`） |
 | `StreamTransport` | SSE 流式逐块产出 | 同上（流式） |
-| `FileExtractor` | PDF 等二进制取文本 | 预留，未接入 |
+| `FileExtractor` | PDF 等二进制取文本 | 预留；TXT 在 core 解码，PDF 尚未注入 |
 | `Clock` | 时间源 | 真实时间，测试注入固定值 |
-| `IdGen` | ID 生成 | `crypto.randomUUID`，测试注入序列 |
+| `IdGen` | ID 生成 | 小程序注入 UUID v4 风格随机 ID，测试注入序列 |
 | `KvStore` | 键值持久化 | `Taro.getStorageSync` 等 |
 
-小程序壳的 `adapters/` 总共不到 120 行，且**没有任何原生代码**。换平台就是重写这几个文件，core 一行不用动。
+小程序的核心组装只依赖少量 `adapters/`。换平台时重写这些适配器与 UI 即可，计划、检索、复习、存储编排等 core 逻辑无需复制。
 
 ---
 
@@ -148,13 +335,15 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 ---
 
-## 6. 范式定位：不是 RAG
+## 6. 范式定位：轻量检索增强，而非向量 RAG 平台
 
-这是一个 **LLM 编排 + 规则引擎主导的确定性工作流**，不是向量检索问答系统：
+这是一个 **LLM 编排 + 规则引擎主导的确定性工作流**。它已经具备本地资料检索增强，但不是依赖 embedding 与向量数据库的通用 RAG 平台：
 
 - **规则引擎是骨架。** 计划的天数、每天时长、任务切片、顺延、里程碑划分都由确定性算法产出，可被黄金样本逐字复现。
 - **LLM 负责理解与措辞。** 识别意图、抽取学习目标、生成 `focus` 短语、把结构化结果说成人话。
-- **检索是"增强"而非"主体"。** 知识图谱与用户上传资料走本地检索，用于补充上下文，不承担事实来源职责。
+- **检索是“增强”而非“主体”。** 知识图谱与用户上传资料走本地检索；命中资料时，计划和教学提示词会带上片段与文件名。
+- **上下文有来源配额。** 资料最多保底 3 条、课程表 2 条、执行记录/画像/图谱各 1 条，避免图谱结果按位置把用户资料挤出窗口。
+- **来源可见。** `retrieved_context` 随计划消息持久化，计划卡片展示来源计数和资料依据。
 
 因此不需要向量库、不需要 embedding 服务、不需要服务器，整个应用可以是纯离线可用的本地程序（模型调用除外）。
 
@@ -179,10 +368,10 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 | 门禁 | 命令 | 现状 |
 | --- | --- | --- |
-| 单元 + 回放测试 | `npm test` | 65/65 通过 |
+| 单元 + 回放测试 | `npm test` | 69/69 通过 |
 | 类型检查 | `npm run typecheck` | 通过（core + 小程序壳） |
 | core 边界规则 | 含在 `npm test` | 通过 |
-| vendor 边界校验 | `npm run check:vendor` | 通过（对外名 134 个） |
+| vendor 边界校验 | `npm run check:vendor` | 通过（对外名 141 个） |
 
 ### 新增行为怎么不破坏基线
 
@@ -206,7 +395,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 ```bash
 npm install                           # 拉依赖（node_modules 不入库，clone 后必跑）
-npm test                              # 全仓测试（65 个）
+npm test                              # 全仓测试（当前 69 个）
 npm run typecheck                     # 全仓类型检查（core + 小程序壳）
 npm run sync:core                     # core → 小程序 vendor（增量覆盖 + 校验）
 npm run check:vendor                  # 只做 vendor 边界校验
@@ -222,7 +411,7 @@ npm run check:vendor                  # 只做 vendor 边界校验
 
 | 平台 | 状态 |
 | --- | --- |
-| 微信小程序（Taro） | 已交付：引导页 / 对话 / 计划（今日·短期·长期·复习）/ 我的 / 历史会话 / 课程表 / 资料库 |
+| 微信小程序（Taro） | 已交付主链路：引导 / 对话 / 计划（今日·短期·长期·复习）/ 我的 / 历史会话 / 课程表 / TXT 资料库；云开发 AI 仅自检 |
 | Web | 待做 |
 | 桌面（Tauri） | 待做 |
 | Android | 待做 |
@@ -237,7 +426,7 @@ npm run check:vendor                  # 只做 vendor 边界校验
 
 下面这条流程把 `node_modules/`、`dist/`、`.pai/`、`.swc/`、`.auth/` 从**全部历史**中删除。它会重写提交 SHA，属破坏性操作，务必按序执行。
 
-> **当前状态：已完成。** 远端 `main` 的历史已重写，clone 体积 53.54 MiB → 0.64 MB，跟踪文件 174 个。下面的流程保留作为复用与追溯 —— 将来若又误提交了大文件，按同样步骤再走一遍即可。
+> **当前状态：已完成。** 首次瘦身时远端 `main` 的 clone 体积从 53.54 MiB 降到 0.64 MB。下面的流程保留作为复用与追溯 —— 将来若又误提交了大文件，按同样步骤再走一遍即可。
 
 ### 10.1 装工具
 

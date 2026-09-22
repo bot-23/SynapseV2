@@ -212,6 +212,9 @@ export default function ChatPage() {
                 message.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant
               )}
             >
+              {message.role === 'assistant' && (
+                <Text className={styles.aiMessageBadge}>AI 生成</Text>
+              )}
               <Text
                 className={message.role === 'user' ? styles.bubbleTextUser : styles.bubbleText}
               >
@@ -236,7 +239,10 @@ export default function ChatPage() {
             )}
 
             {message.role === 'assistant' && message.weeklyPlan.length > 0 && (
-              <PlanCard weeklyPlan={message.weeklyPlan} />
+              <PlanCard
+                weeklyPlan={message.weeklyPlan}
+                retrievedContext={message.retrievedContext}
+              />
             )}
           </View>
         ))}

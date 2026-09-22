@@ -25,6 +25,11 @@ import {
   sanitize_subject_candidate,
 } from "../domain/multiSubject.js";
 import { apply_timetable_to_payload, build_timetable_context } from "../domain/timetable.js";
+import {
+  allocate_context_budget,
+  collect_document_hits,
+  type ParsedDocumentHit,
+} from "../domain/contextBudget.js";
 import { BlockPlanService } from "../domain/blockPlans.js";
 import { RulePlanService } from "../domain/rulePlans.js";
 import { pyInt, pyTruncInt } from "../domain/pyCompat.js";
@@ -267,7 +272,10 @@ export class StudyPlanWorkflowService {
         response.message,
         {
           plan_data_json: response.plan
-            ? JSON.stringify({ weekly_plan: response.plan.weekly_plan })
+            ? JSON.stringify({
+                weekly_plan: response.plan.weekly_plan,
+                retrieved_context: response.plan.retrieved_context,
+              })
             : null,
           request_context_json: JSON.stringify({
             mode: response.mode,
@@ -506,8 +514,14 @@ export class StudyPlanWorkflowService {
         const subject = String(params["subject"] ?? "");
         const action = String(params["action"] ?? "");
         const topic = String(params["topic"] ?? "");
+        const teachContext = this._retrieve_for_query(
+          [topic, subject, this._payload_input(payload)].filter(Boolean).join(" "),
+          normalizedPayload,
+        );
         try {
-          msg = await this.providers.llm.generateText(buildTeachPrompt(subject, action, topic));
+          msg = await this.providers.llm.generateText(
+            buildTeachPrompt(subject, action, topic, teachContext),
+          );
         } catch {
           msg = `关于${topic}，我建议你先从基础概念开始，然后做几道针对性练习。`;
         }
@@ -1130,7 +1144,22 @@ export class StudyPlanWorkflowService {
     // v2：课程表上下文（未导入课表时为空数组，不改变旧行为）
     context.push(...build_timetable_context(this.runtime_store.get_timetable(payload.user_id)));
 
-    return this._dedupe_preferences(context).slice(0, 8);
+    const deduped = this._dedupe_preferences(context);
+    return collect_document_hits(deduped).length
+      ? allocate_context_budget(deduped)
+      : deduped.slice(0, 8);
+  }
+
+  private _retrieve_for_query(query: string, payload: StudyPlanRequest, limit = 3): string[] {
+    const trimmed = String(query ?? "").trim();
+    if (!trimmed) {
+      return [];
+    }
+    const documents = this.runtime_store.get_documents(payload.user_id);
+    if (!documents.length) {
+      return [];
+    }
+    return search_document_records(documents as never, trimmed, null, limit);
   }
 
   private _assess_plan_readiness(
@@ -1673,10 +1702,18 @@ export class StudyPlanWorkflowService {
     if (fileHint) {
       reasons.push("这版安排会尽量结合你上传资料里的正文信息，而不是只看文件名。");
     }
-    if (retrievedContext.length) {
+    const evidenceReasons: string[] = [];
+    const docHits = collect_document_hits(retrievedContext);
+    if (docHits.length) {
+      evidenceReasons.push(
+        `我检索到你资料库里《${this._material_names(docHits)}》的相关片段，并按它调整了内容。`,
+      );
+    }
+    if (!docHits.length && retrievedContext.length) {
       reasons.push("我还参考了现有知识图谱里的相关内容来补全计划顺序。");
     }
-    return reasons.slice(0, 4).join("");
+    const budget = Math.max(0, 4 - evidenceReasons.length);
+    return [...reasons.slice(0, budget), ...evidenceReasons].join("");
   }
 
   // ------------------------------------------------------------------
@@ -2010,7 +2047,7 @@ export class StudyPlanWorkflowService {
   ): Promise<PlanGeneration> {
     // 已知模型不可达：不再发起请求（避免用户连吃两次超时），直接用规则计划
     if (this._llmUnreachableReason) {
-      const fallback = await this._generate_rule_plan(payload);
+      const fallback = await this._generate_rule_plan(payload, retrievedContext);
       const notice = this._fallback_notice(this._llmUnreachableReason);
       return {
         ...fallback,
@@ -2026,7 +2063,7 @@ export class StudyPlanWorkflowService {
       try {
         return await this._generate_deepseek_plan(payload, retrievedContext, llmInfo);
       } catch (error) {
-        const fallback = await this._generate_rule_plan(payload);
+        const fallback = await this._generate_rule_plan(payload, retrievedContext);
         return {
           ...fallback,
           status: "fallback",
@@ -2035,7 +2072,7 @@ export class StudyPlanWorkflowService {
       }
     }
 
-    const fallback = await this._generate_rule_plan(payload);
+    const fallback = await this._generate_rule_plan(payload, retrievedContext);
     // 离线规划模式（壳显式开启且用户没配 Key）：必须说明这版计划是本地规则排的。
     // 注意不能只依赖 _llmUnreachableReason —— 走澄清问答时那个标记会在
     // submit_clarification 开头被重置，提示就丢了（这就是「没配 Key 却悄悄出了计划」的原因）。
@@ -2606,6 +2643,7 @@ export class StudyPlanWorkflowService {
   private async _generate_multi_subject_rule_plan(
     payload: StudyPlanRequest,
     subjects: string[],
+    retrievedContext: string[],
   ): Promise<PlanGeneration> {
     const totalDays = Math.min(Math.max(1, payload.available_days_per_week), 5);
     const subjectPlans = subjects.map((subject) => {
@@ -2618,6 +2656,8 @@ export class StudyPlanWorkflowService {
     });
 
     const merged = merge_subject_plans(subjectPlans, totalDays, payload.available_minutes_per_day);
+    const hits = collect_document_hits(retrievedContext);
+    const weeklyPlan = hits.length ? this._attach_material_evidence(merged, hits) : merged;
     const summary = `已按科目（${subjects.join("、")}）分别排课并合并到每天的 ${payload.available_minutes_per_day} 分钟预算内。`;
 
     let finalMessage = "";
@@ -2642,9 +2682,12 @@ export class StudyPlanWorkflowService {
         `我先按你输入的「${this._short_goal(payload.learning_goal)}」整理了这版计划，` +
         `涉及 ${subjects.join("、")} 这几科，每天会同时安排，各自控制在 ${payload.available_minutes_per_day} 分钟总预算内。`;
     }
+    if (hits.length) {
+      finalMessage = `${finalMessage}\n（这版安排参考了你上传的《${this._material_names(hits)}》。）`;
+    }
 
     return {
-      weekly_plan: merged,
+      weekly_plan: weeklyPlan,
       final_message: finalMessage,
       next_actions: [
         "看看每天各科的比例是否合适，需要调整可以直接告诉我。",
@@ -2655,10 +2698,13 @@ export class StudyPlanWorkflowService {
     };
   }
 
-  private async _generate_rule_plan(payload: StudyPlanRequest): Promise<PlanGeneration> {
+  private async _generate_rule_plan(
+    payload: StudyPlanRequest,
+    retrievedContext: string[],
+  ): Promise<PlanGeneration> {
     const subjects = this._detect_payload_subjects(payload);
     if (subjects.length >= 2) {
-      return this._generate_multi_subject_rule_plan(payload, subjects);
+      return this._generate_multi_subject_rule_plan(payload, subjects, retrievedContext);
     }
 
     const result = this.rule_plan_service.generate_rule_plan(payload);
@@ -2672,6 +2718,11 @@ export class StudyPlanWorkflowService {
         ...day,
         tasks: day.tasks.map((task) => ({ ...task, subject: singleSubject })),
       }));
+    }
+
+    const hits = collect_document_hits(retrievedContext);
+    if (hits.length) {
+      weeklyPlan = this._attach_material_evidence(weeklyPlan, hits);
     }
 
     const topic = this.rule_plan_service.infer_topic(payload.learning_goal, payload.weak_points);
@@ -2709,8 +2760,43 @@ export class StudyPlanWorkflowService {
     if (!finalMessage) {
       finalMessage = result.final_message;
     }
+    if (hits.length) {
+      finalMessage = `${finalMessage}\n（这版安排参考了你上传的《${this._material_names(hits)}》。）`;
+    }
 
-    return { ...result, final_message: finalMessage };
+    return { ...result, weekly_plan: weeklyPlan, final_message: finalMessage };
+  }
+
+  private _attach_material_evidence(
+    weeklyPlan: StudyDayPlan[],
+    hits: ParsedDocumentHit[],
+  ): StudyDayPlan[] {
+    if (!weeklyPlan.length || !hits.length) {
+      return weeklyPlan;
+    }
+    const firstDay = weeklyPlan[0]!;
+    if (!firstDay.tasks.length) {
+      return weeklyPlan;
+    }
+    const snippet = String(hits[0]!.excerpt ?? "")
+      .replace(/\s+/g, " ")
+      .slice(0, 60);
+    const note = `参考你上传的《${hits[0]!.file_name}》：${snippet}…`;
+    return weeklyPlan.map((day, dayIndex) => {
+      if (dayIndex !== 0) {
+        return day;
+      }
+      return {
+        ...day,
+        tasks: day.tasks.map((task, taskIndex) =>
+          taskIndex === 0 ? { ...task, reason: `${task.reason}（${note}）` } : task,
+        ),
+      };
+    });
+  }
+
+  private _material_names(hits: ParsedDocumentHit[]): string {
+    return [...new Set(hits.map((hit) => hit.file_name))].join("、");
   }
 
   // ------------------------------------------------------------------
@@ -2733,4 +2819,3 @@ export class StudyPlanWorkflowService {
     return this.rule_plan_service.clean_text(value);
   }
 }
-

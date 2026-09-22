@@ -10,6 +10,7 @@ apps/miniprogram/dist/
 apps/miniprogram/.auth/
 
 # 小程序 IDE / 预览运行时（日志、进程锁、更新时间戳）
+.pai/
 apps/miniprogram/.pai/
 
 # SWC 编译缓存（文件名含平台相关 hash）
@@ -17,3 +18,7 @@ apps/miniprogram/.swc/
 
 # 日志与临时文件
 *.log
+
+# 本地验收材料
+/trae-tasks.md
+/高三数学错题笔记.txt

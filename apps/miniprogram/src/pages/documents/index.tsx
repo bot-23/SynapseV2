@@ -49,6 +49,60 @@ export default function DocumentsPage() {
     }
   }
 
+  const pickFile = async () => {
+    if (busy) {
+      return
+    }
+    try {
+      const picked = await (Taro as any).chooseMessageFile({
+        count: 1,
+        type: 'file',
+        extension: ['txt']
+      })
+      const file = picked.tempFiles?.[0]
+      if (!file) {
+        return
+      }
+      if ('size' in file && file.size > 2 * 1024 * 1024) {
+        Taro.showToast({ title: '文件请控制在 2MB 以内', icon: 'none' })
+        return
+      }
+      setBusy(true)
+      const fs = Taro.getFileSystemManager()
+      const buffer = fs.readFileSync(file.path as string) as unknown as ArrayBuffer
+      const attachments = await getCore().extractFiles([
+        {
+          name: file.name,
+          contentType: 'text/plain',
+          data: new Uint8Array(buffer)
+        }
+      ])
+      const attachment = attachments[0]
+      if (!attachment || attachment.extraction_status !== 'done' || !attachment.extracted_text) {
+        Taro.showToast({
+          title: attachment?.extraction_error || '这个文件没有提取到文本',
+          icon: 'none'
+        })
+        return
+      }
+      const result = getCore().importDocument(
+        DEFAULT_USER_ID,
+        file.name || name.trim(),
+        attachment.extracted_text
+      )
+      Taro.showToast({ title: result.message, icon: 'none' })
+      if (result.success) {
+        setName('')
+        setText('')
+        load()
+      }
+    } catch (error) {
+      console.log('[Synapse] 选择文件结束', error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const removeDoc = async (doc: DocumentView) => {
     const confirmed = await Taro.showModal({
       title: '删除资料',
@@ -69,6 +123,13 @@ export default function DocumentsPage() {
     <View className={styles.page}>
       <View className={styles.card}>
         <Text className={styles.cardTitle}>粘贴导入</Text>
+        <Button
+          className={classnames(styles.fileButton, busy && styles.buttonDisabled)}
+          disabled={busy}
+          onClick={pickFile}
+        >
+          从聊天记录选文件（.txt）
+        </Button>
         <Text className={styles.cardDesc}>
           把笔记、提纲或教材片段粘进来。切片与检索都在本机完成 —— 不联网、不上传，也不需要额外服务。
         </Text>

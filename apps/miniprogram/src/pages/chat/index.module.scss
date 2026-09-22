@@ -169,6 +169,13 @@
   border-bottom-left-radius: $radius-xs;
 }
 
+.aiMessageBadge {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-primary;
+  margin-bottom: 4rpx;
+}
+
 .bubbleText {
   font-size: $font-size-md;
   color: $color-text-primary;

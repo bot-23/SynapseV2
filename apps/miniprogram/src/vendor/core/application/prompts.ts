@@ -3,14 +3,17 @@
  */
 
 import type { StudyPlanRequest } from "../protocol/study";
+import {
+  allocate_context_budget,
+  collect_document_hits,
+} from "../domain/contextBudget";
 
 export function buildPlanPrompt(
   payload: StudyPlanRequest,
   retrievedContext: string[],
 ): string {
   const context =
-    retrievedContext
-      .slice(0, 5)
+    allocate_context_budget(retrievedContext, 8)
       .map((item) => `- ${item}`)
       .join("\n") || "- 暂无检索资料";
   const weakPoints = payload.weak_points.length ? payload.weak_points.join("、") : "未明确";
@@ -103,8 +106,25 @@ export function buildConversationalReplyPrompt(
   );
 }
 
-export function buildTeachPrompt(subject: string, action: string, topic: string): string {
-  return `用户需要教学帮助。学科：${subject}，动作：${action}，知识点：${topic}。请给出具体、可操作的教学内容（2-5句）。`;
+export function buildTeachPrompt(
+  subject: string,
+  action: string,
+  topic: string,
+  retrievedContext: string[] = [],
+): string {
+  const base = `用户需要教学帮助。学科：${subject}，动作：${action}，知识点：${topic}。请给出具体、可操作的教学内容（2-5句）。`;
+  const documentHits = collect_document_hits(retrievedContext);
+  if (!documentHits.length) {
+    return base;
+  }
+  const materials = documentHits
+    .map((hit) => `- 资料命中[${hit.file_name}]: ${hit.excerpt}`)
+    .join("\n");
+  return (
+    base +
+    "\n\n以下是从用户自己上传的资料中检索到的片段，请优先依据这些片段回答，并明确告诉用户依据来自哪份资料；如果片段不足以回答，请明确说明资料里没有覆盖，不要凭空补充：\n" +
+    materials
+  );
 }
 
 export function buildRememberRetryPrompt(userInput: string): string {

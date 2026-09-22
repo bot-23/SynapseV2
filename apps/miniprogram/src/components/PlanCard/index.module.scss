@@ -25,11 +25,25 @@
   min-width: 0;
 }
 
+.titleLine {
+  display: flex;
+  align-items: center;
+}
+
 .cardTitle {
   display: block;
   font-size: $font-size-lg;
   font-weight: $font-weight-semibold;
   color: $color-text-primary;
+}
+
+.aiBadge {
+  font-size: $font-size-xs;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.1);
+  border-radius: $radius-xs;
+  padding: 2rpx 10rpx;
+  margin-left: $spacing-xs;
 }
 
 .cardMeta {
@@ -63,6 +77,22 @@
   color: $color-text-secondary;
   line-height: $line-height-loose;
   margin-top: $spacing-sm;
+}
+
+.sourceSummary,
+.sourceEvidence {
+  display: block;
+  font-size: $font-size-xs;
+  line-height: $line-height-normal;
+  margin-top: $spacing-xs;
+}
+
+.sourceSummary {
+  color: $color-text-secondary;
+}
+
+.sourceEvidence {
+  color: $color-primary;
 }
 
 .dayBlock {

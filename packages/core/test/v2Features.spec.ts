@@ -26,6 +26,11 @@ import {
   search_document_records,
 } from "../src/domain/documentRetrieval.js";
 import {
+  allocate_context_budget,
+  collect_document_hits,
+  summarize_context_sources,
+} from "../src/domain/contextBudget.js";
+import {
   append_subjects_to_days,
   detect_subject_candidates,
   detect_subjects,
@@ -38,6 +43,7 @@ import type {
 } from "../src/providers/contracts.js";
 import type { StudyPlanRequest, TimetableEntry } from "../src/protocol/study.js";
 import type { StudyPilotRunRequest } from "../src/protocol/frontend.js";
+import { buildTeachPrompt } from "../src/application/prompts.js";
 
 let idCounter = 0;
 const testIdGen = { next: () => `id-${++idCounter}` };
@@ -1118,6 +1124,120 @@ describe("core v2：资料库（粘贴导入 + BM25）", () => {
     const removed = core.removeDocument("default", String(doc["doc_id"]));
     expect(removed.success).toBe(true);
     expect((core.listDocuments().data as Record<string, unknown>)["total"]).toBe(0);
+  });
+});
+
+describe("core v2：用户资料进入计划上下文", () => {
+  const mathNotes = [
+    "高三数学错题笔记（近一个月）",
+    "一、函数与导数",
+    "1. 含参函数单调性讨论：忘记先求导再对参数分类（a>0、a=0、a<0 三种情况）。",
+    "2. 极值点偏移：构造对称函数后忘记说明单调性，结论不严谨。",
+    "函数与导数是失分最多的板块，想每天抽 45 分钟专练，先从单调性讨论开始。",
+  ].join("\n");
+
+  it("配额分配保证资料不会被知识图谱挤出", () => {
+    const context = allocate_context_budget([
+      "图谱摘要：当前已有 9 个节点、10 条边。",
+      "图谱命中：函数。",
+      "图谱命中：单调性。",
+      "图谱命中：导数。",
+      "图谱建议路径：先知识点梳理，再做题验证。",
+      "资料命中[高三数学错题笔记.txt]: 含参函数单调性讨论。",
+      "课程表：已导入 1 节课。",
+    ]);
+
+    expect(context).toContain("资料命中[高三数学错题笔记.txt]: 含参函数单调性讨论。");
+    expect(context).toHaveLength(7);
+    expect(summarize_context_sources(context).document).toBe(1);
+    expect(collect_document_hits(context)).toEqual([
+      { file_name: "高三数学错题笔记.txt", excerpt: "含参函数单调性讨论。" },
+    ]);
+  });
+
+  it("离线规则计划会在消息、理由和首个任务中引用命中的资料", async () => {
+    const core = createSynapseCore({
+      clock: { nowIso: () => "2026-09-23T00:00:00.000Z" },
+      idGen: { next: () => `rag-${++idCounter}` },
+      config: { offlinePlanFallback: true },
+    });
+    core.importDocument("default", "高三数学错题笔记.txt", mathNotes);
+
+    const response = await core.run({
+      ...runPayload("conv-rag"),
+      input: "我要准备高考数学，函数与导数这块总是错，帮我在两周内补起来",
+    });
+
+    expect(response.plan).not.toBeNull();
+    expect(response.plan!.retrieved_context.some((line) => line.startsWith("资料命中["))).toBe(
+      true,
+    );
+    expect(response.message).toContain("高三数学错题笔记.txt");
+    expect(response.reason).toContain("高三数学错题笔记.txt");
+    expect(response.plan!.weekly_plan[0]!.tasks[0]!.reason).toContain(
+      "高三数学错题笔记.txt",
+    );
+    const messages = (core.getMessages("conv-rag").data ?? []) as Array<{
+      role: string;
+      plan_data_json: string | null;
+    }>;
+    const assistant = messages.find((message) => message.role === "assistant");
+    expect(JSON.parse(assistant!.plan_data_json!)).toMatchObject({
+      retrieved_context: expect.arrayContaining([
+        expect.stringContaining("资料命中[高三数学错题笔记.txt]"),
+      ]),
+    });
+  });
+});
+
+describe("core v2：教学路径资料检索", () => {
+  it("命中资料时把文件名和片段加入教学提示词", async () => {
+    const prompts: string[] = [];
+    const teachingLlm: LlmProvider = {
+      describe: () => ({ provider: "deepseek", model: "teaching-test", status: "ready" }),
+      generateWithTools: async () => ({
+        tool_calls: [
+          {
+            name: "teach",
+            args: { subject: "数学", action: "讲解", topic: "含参函数单调性讨论" },
+          },
+        ],
+      }),
+      generateText: async (prompt) => {
+        prompts.push(prompt);
+        return "依据你的《高三数学错题笔记.txt》，先求导再分类讨论参数。";
+      },
+      generateJson: async () => ({}),
+      async *streamText() {
+        yield "";
+      },
+    };
+    const core = createSynapseCore({
+      clock: { nowIso: () => "2026-09-23T00:00:00.000Z" },
+      idGen: { next: () => `teach-${++idCounter}` },
+    });
+    core.workflow.providers = { ...core.workflow.providers, llm: teachingLlm };
+    core.importDocument(
+      "default",
+      "高三数学错题笔记.txt",
+      "含参函数单调性讨论：忘记先求导再对参数分类。",
+    );
+
+    const response = await core.run({
+      ...runPayload("conv-teach"),
+      input: "含参函数单调性讨论怎么做",
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("资料命中[高三数学错题笔记.txt]");
+    expect(prompts[0]).toContain("如果片段不足以回答，请明确说明资料里没有覆盖");
+    expect(response.message).toContain("高三数学错题笔记.txt");
+  });
+
+  it("没有资料时教学提示词与旧版逐字一致", () => {
+    expect(buildTeachPrompt("数学", "讲解", "导数")).toBe(
+      "用户需要教学帮助。学科：数学，动作：讲解，知识点：导数。请给出具体、可操作的教学内容（2-5句）。",
+    );
   });
 });
 

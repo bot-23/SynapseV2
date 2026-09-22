@@ -10,6 +10,7 @@ export interface ChatMessageView {
   role: 'user' | 'assistant'
   content: string
   weeklyPlan: StudyDayPlan[]
+  retrievedContext: string[]
   blockPlan: BlockPlan | null
   clarification: ClarificationPrompt | null
   normalized: StudyPlanRequest | null
@@ -40,6 +41,7 @@ export function localMessage(
     role,
     content,
     weeklyPlan: [],
+    retrievedContext: [],
     blockPlan: null,
     clarification: null,
     normalized: null,
@@ -49,7 +51,10 @@ export function localMessage(
 
 export function toChatMessages(records: Array<Record<string, unknown>>): ChatMessageView[] {
   return records.map((record) => {
-    const planData = parseJson<{ weekly_plan?: StudyDayPlan[] }>(record['plan_data_json'])
+    const planData = parseJson<{
+      weekly_plan?: StudyDayPlan[]
+      retrieved_context?: string[]
+    }>(record['plan_data_json'])
     const context = parseJson<{
       blockPlan?: BlockPlan | null
       clarification?: ClarificationPrompt | null
@@ -62,6 +67,7 @@ export function toChatMessages(records: Array<Record<string, unknown>>): ChatMes
       role: record['role'] === 'user' ? 'user' : 'assistant',
       content: String(record['content'] ?? ''),
       weeklyPlan: planData?.weekly_plan ?? [],
+      retrievedContext: planData?.retrieved_context ?? [],
       blockPlan: context?.blockPlan ?? null,
       clarification: context?.clarification ?? null,
       normalized: context?.normalized ?? null,

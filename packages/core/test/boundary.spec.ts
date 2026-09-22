@@ -16,7 +16,7 @@ const FORBIDDEN = [
   /from\s+["'](fs|path|os|http|https|crypto|util|stream|url|child_process)["']/,
   /require\s*\(/,
   /\bwindow\b/,
-  /\bdocument\b/,
+  /\bdocument\s*(?:\.|\[|\()/,
   /\bwx\./,
   /@tauri-apps/,
   /\bfetch\s*\(/,

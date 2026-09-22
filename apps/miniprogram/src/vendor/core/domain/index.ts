@@ -10,6 +10,17 @@ export {
   type DocumentRecord,
 } from "./documentRetrieval";
 export {
+  CONTEXT_BUDGET,
+  CONTEXT_QUOTAS,
+  allocate_context_budget,
+  classify_context_line,
+  collect_document_hits,
+  parse_document_hit,
+  summarize_context_sources,
+  type ContextSource,
+  type ParsedDocumentHit,
+} from "./contextBudget";
+export {
   apply_timetable_to_payload,
   build_timetable_context,
   list_timetable_subjects,
