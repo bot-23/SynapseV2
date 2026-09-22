@@ -236,6 +236,8 @@ npm run check:vendor                  # 只做 vendor 边界校验
 
 下面这条流程把 `node_modules/`、`dist/`、`.pai/`、`.swc/`、`.auth/` 从**全部历史**中删除。它会重写提交 SHA，属破坏性操作，务必按序执行。
 
+> **当前状态：已完成。** 远端 `main` 的历史已重写，clone 体积 53.54 MiB → 0.64 MB，跟踪文件 174 个。下面的流程保留作为复用与追溯 —— 将来若又误提交了大文件，按同样步骤再走一遍即可。
+
 ### 10.1 装工具
 
 `git filter-branch` 已被官方劝退，用 `git-filter-repo`（单文件 Python 脚本）：
