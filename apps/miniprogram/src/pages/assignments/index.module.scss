@@ -215,6 +215,16 @@
   color: $color-text-secondary;
 }
 
+/* G4.1：还没逾期、但按剩余天数与每日预算已经排不开的提前预警（黄，区别于逾期的红） */
+.riskTag {
+  margin-left: $spacing-xs;
+  padding: 2rpx $spacing-sm;
+  border-radius: $radius-button;
+  background: rgba(217, 119, 6, 0.14);
+  font-size: $font-size-xs;
+  color: #b45309;
+}
+
 .itemMeta {
   font-size: $font-size-xs;
   color: $color-text-tertiary;

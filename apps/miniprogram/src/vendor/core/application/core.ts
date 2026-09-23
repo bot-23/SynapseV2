@@ -725,7 +725,15 @@ export class SynapseCore {
   }
 
   /** 勾选今日条目。进度写进统一存储，所以今日页与短期计划的勾选是同一份数据。 */
-  toggleTodayItem(userId: string, key: string): ApiResponse<Record<string, unknown>> {
+  toggleTodayItem(
+    userId: string,
+    key: string,
+    /**
+     * G4.2：覆盖记入的用时，默认仍按任务原时长记录。
+     * 「先学 5 分钟」传 5 —— 让「我真的开始了」在数据上留痕，而不是假装做完了一整块。
+     */
+    actualMinutes?: number,
+  ): ApiResponse<Record<string, unknown>> {
     try {
       const uid = userId || "default";
       const record = this._ensure_today(uid);
@@ -749,7 +757,10 @@ export class SynapseCore {
           done,
           taskTitle: target.title,
           taskType: target.task_type,
-          actualMinutes: target.duration_minutes,
+          actualMinutes:
+            typeof actualMinutes === "number" && Number.isFinite(actualMinutes)
+              ? Math.max(0, Math.trunc(actualMinutes))
+              : target.duration_minutes,
         });
         if (done) {
           this._enqueue_review(uid, target.subject, target.title, target.task_type);

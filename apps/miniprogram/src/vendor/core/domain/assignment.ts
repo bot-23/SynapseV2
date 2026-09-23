@@ -353,6 +353,46 @@ export function is_assignment_overdue(item: AssignmentItem, today: string): bool
   return diff !== null && diff < 0;
 }
 
+/** 风险阈值：剩余工作量占「剩余天数 × 日预算」超过八成，就提前亮黄灯。 */
+export const ASSIGNMENT_RISK_THRESHOLD = 0.8;
+
+export interface AssignmentRisk {
+  /** 还没做完的工作量（分钟） */
+  remaining_minutes: number;
+  /** 从今天到截止日（含今天）能腾出的总时长 */
+  capacity_minutes: number;
+  /** 占用率 = 剩余 ÷ 可用；可用为 0 时记 0，看 `at_risk` 就行 */
+  load: number;
+  at_risk: boolean;
+}
+
+/**
+ * 逾期风险预警（纯函数）。
+ *
+ * 口径刻意简单：只看这一条作业自己，能不能在剩余天数里按每日预算做完。
+ * 不把「同时还有别的作业在抢时间」算进来 —— 那需要真排期，而排期已经由
+ * `build_assignment_schedule` 做了。这里要的是一个提前几天的黄灯，不是一句承诺，
+ * 所以宁可保守也不假装精确。已逾期的不再报 at_risk：那时候有更重的红色信号。
+ */
+export function assignment_risk(
+  item: AssignmentItem,
+  today: string,
+  dailyBudget: number,
+): AssignmentRisk {
+  const remaining = item.status === "done" ? 0 : Math.max(0, Math.trunc(item.estimated_minutes));
+  const diff = days_between(today, item.due_date);
+  // 截止日当天也算一天可用：「明天交」= 今天 + 明天，共两天
+  const days = diff === null ? 0 : Math.max(0, diff + 1);
+  const capacity = days * Math.max(0, Math.trunc(dailyBudget));
+  const load = capacity > 0 ? Number((remaining / capacity).toFixed(2)) : 0;
+  return {
+    remaining_minutes: remaining,
+    capacity_minutes: capacity,
+    load,
+    at_risk: remaining > 0 && days > 0 && (capacity <= 0 || load > ASSIGNMENT_RISK_THRESHOLD),
+  };
+}
+
 /** 把入库的作业状态刷新成「今天」视角（逾期 / 待办 / 已完成）。 */
 export function refresh_assignment_statuses(
   items: AssignmentItem[],

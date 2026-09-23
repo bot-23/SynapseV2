@@ -138,6 +138,9 @@ export default function PlanView() {
     return { total: items.length, done: items.filter((item) => item.done).length }
   }, [today])
 
+  /** G4.2：今天第一条还没做的任务，就是「先学 5 分钟」的对象。 */
+  const starter = (today?.items ?? []).find((item) => !item.done) ?? null
+
   const upcomingReviews = useMemo(
     () => reviews.filter((item) => !dueReviews.some((due) => due.id === item.id)),
     [reviews, dueReviews],
@@ -179,6 +182,21 @@ export default function PlanView() {
       flash(result.message || '更新失败')
       return
     }
+    load()
+  }
+
+  /**
+   * G4.2 最小启动行动：拖延的解法不是排得更满，而是把第一步缩到不可能失败。
+   * 走的还是 toggleTodayItem 这条既有打卡链路，只是把用时记成 5 分钟。
+   */
+  const startFive = (key: string) => {
+    const result = getCore().toggleTodayItem(DEFAULT_USER_ID, key, 5)
+    console.log('[Synapse] 先学 5 分钟', key, result.success)
+    if (!result.success) {
+      flash(result.message || '更新失败')
+      return
+    }
+    flash('已记下 5 分钟，先动起来就赢一半')
     load()
   }
 
@@ -351,6 +369,14 @@ export default function PlanView() {
               </span>
             </div>
           </div>
+
+          {starter && (
+            <button type="button" className="plan-starter" onClick={() => startFive(starter.key)}>
+              <span className="plan-starter-kicker">先学 5 分钟</span>
+              <span className="plan-starter-title">{starter.title}</span>
+              <span className="plan-starter-hint">点一下就记下这次启动</span>
+            </button>
+          )}
 
           {(today?.items ?? []).length === 0 && (
             <div className="plan-today-empty">

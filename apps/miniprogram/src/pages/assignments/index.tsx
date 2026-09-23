@@ -39,6 +39,7 @@ interface BoardView {
   pending_count: number
   done_count: number
   overdue_count: number
+  at_risk_ids: string[]
 }
 
 interface PackView {
@@ -176,6 +177,9 @@ export default function AssignmentsPage() {
   }
   groups.sort((a, b) => (a.date < b.date ? -1 : 1))
 
+  /** G4.1：core 已经算好「可能逾期」的 id，壳侧只负责显示，不在这里重算口径。 */
+  const isAtRisk = (id: string) => (board?.at_risk_ids ?? []).indexOf(id) >= 0
+
   return (
     <View className={styles.page}>
       <View className={styles.card}>
@@ -253,6 +257,9 @@ export default function AssignmentsPage() {
                           {item.unit}
                         </Text>
                       )}
+                      {isAtRisk(item.id) && (
+                        <Text className={styles.riskTag}>可能逾期</Text>
+                      )}
                     </View>
                     <Text className={styles.itemMeta}>
                       预估 {item.estimated_minutes} 分钟
@@ -260,7 +267,9 @@ export default function AssignmentsPage() {
                         ? ` · 已于 ${item.done_at} 完成`
                         : item.status === 'overdue'
                           ? ` · 已逾期${item.original_due_date ? `（原定 ${item.original_due_date}）` : ''}`
-                          : ''}
+                          : isAtRisk(item.id)
+                            ? ' · 按剩余天数与每日预算已经排不开'
+                            : ''}
                       {item.review_card_ids.length
                         ? ` · ${item.review_card_ids.length} 张复习卡`
                         : ''}

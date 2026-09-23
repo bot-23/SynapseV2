@@ -17,6 +17,7 @@ import type {
   TimetableEntry,
 } from "../protocol/study.js";
 import {
+  assignment_risk,
   build_assignment_schedule,
   estimate_assignment_minutes,
   is_assignment_overdue,
@@ -96,11 +97,16 @@ export class AssignmentService {
     const items = refresh_assignment_statuses(stored, today);
     const changed = items.some((item, index) => item.status !== stored[index]?.status);
     const persisted = changed ? this.store.save_assignments(userId, items) : items;
+    const dailyMinutes = this.daily_minutes(userId);
     const schedule = build_assignment_schedule({
       items: persisted,
       today,
-      daily_minutes: this.daily_minutes(userId),
+      daily_minutes: dailyMinutes,
     });
+    // G4.1：还没逾期、但按剩余天数与日预算已经排不开的，提前亮黄灯
+    const atRiskIds = persisted
+      .filter((item) => assignment_risk(item, today, dailyMinutes).at_risk)
+      .map((item) => item.id);
     return {
       items: persisted,
       schedule,
@@ -108,6 +114,7 @@ export class AssignmentService {
       pending_count: persisted.filter((item) => item.status === "pending").length,
       done_count: persisted.filter((item) => item.status === "done").length,
       overdue_count: persisted.filter((item) => item.status === "overdue").length,
+      at_risk_ids: atRiskIds,
       generated_at: this.clock.nowIso(),
     };
   }

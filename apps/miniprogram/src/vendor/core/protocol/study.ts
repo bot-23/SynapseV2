@@ -279,6 +279,8 @@ export interface AssignmentSnapshot {
   pending_count: number;
   done_count: number;
   overdue_count: number;
+  /** 还没逾期、但按剩余天数与每日预算已经排不开的作业 id（壳侧显示「可能逾期」黄标） */
+  at_risk_ids: string[];
   generated_at: string;
 }
 

@@ -136,6 +136,9 @@ export default function PlanPage() {
     return { total: items.length, done: items.filter((item) => item.done).length }
   }, [today])
 
+  /** G4.2：今天第一条还没做的任务，就是「先学 5 分钟」的对象。 */
+  const starter = (today?.items ?? []).find((item) => !item.done) ?? null
+
   const upcomingReviews = useMemo(
     () => reviews.filter((item) => !dueReviews.some((due) => due.id === item.id)),
     [reviews, dueReviews]
@@ -177,6 +180,21 @@ export default function PlanPage() {
       return
     }
     // 打卡是同一份数据，短期视图也要跟着刷新
+    load()
+  }
+
+  /**
+   * G4.2 最小启动行动：拖延的解法不是排得更满，而是把第一步缩到不可能失败。
+   * 走的还是 toggleTodayItem 这条既有打卡链路，只是把用时记成 5 分钟。
+   */
+  const startFive = (key: string) => {
+    const result = getCore().toggleTodayItem(DEFAULT_USER_ID, key, 5)
+    console.log('[Synapse] 先学 5 分钟', key, result.success)
+    if (!result.success) {
+      Taro.showToast({ title: result.message || '更新失败', icon: 'none' })
+      return
+    }
+    Taro.showToast({ title: '已记下 5 分钟，先动起来就赢一半', icon: 'none', duration: 2500 })
     load()
   }
 
@@ -380,6 +398,16 @@ export default function PlanPage() {
               </Text>
             </View>
           </View>
+
+          {!!starter && (
+            <View
+              className={styles.starter}
+              onClick={() => startFive(starter.key)}
+            >
+              <Text className={styles.starterKicker}>先学 5 分钟</Text>
+              <Text className={styles.starterTitle}>{starter.title}</Text>
+            </View>
+          )}
 
           {(today?.items ?? []).length === 0 && (
             <View className={styles.todayEmpty}>

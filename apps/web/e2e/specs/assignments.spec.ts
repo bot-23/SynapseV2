@@ -70,4 +70,18 @@ test.describe('作业式计划', () => {
 
     await expect(page.locator('.notice.snackbar')).toContainText('不是作业包')
   })
+
+  test('超出剩余天数的作业会被提前标成「可能逾期」', async ({ page }) => {
+    await onboard(page)
+
+    await page.locator('.nav-item', { hasText: '作业' }).click()
+    // 100 页 ≈ 1000 分钟，明天交 → 远超「今天 + 明天」两天的预算
+    await page.locator('.docs-page textarea').first().fill('物理练习册第1页到第100页明天交')
+    await page.getByRole('button', { name: '排进日程' }).click()
+    await expect(page.locator('.assignment-row')).toHaveCount(1)
+
+    // 黄色预警，且不是更重的红色「已逾期」
+    await expect(page.locator('.assignment-risk')).toHaveText('可能逾期')
+    await expect(page.locator('.assignment-countdown').first()).not.toContainText('已逾期')
+  })
 })

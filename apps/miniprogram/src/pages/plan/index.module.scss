@@ -56,6 +56,35 @@
   padding: $spacing-lg;
 }
 
+/* G4.2：今日最小启动行动——把第一步缩到不可能失败 */
+.starter {
+  display: flex;
+  flex-direction: column;
+  margin-top: $spacing-md;
+  padding: $spacing-md $spacing-lg;
+  background: rgba(91, 108, 255, 0.08);
+  border: 2rpx solid rgba(91, 108, 255, 0.24);
+  border-radius: $radius-lg;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.starterKicker {
+  color: $color-primary;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  letter-spacing: 1rpx;
+}
+
+.starterTitle {
+  margin-top: 6rpx;
+  color: $color-text-primary;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+}
+
 .summaryHeader {
   display: flex;
   align-items: center;

@@ -36,7 +36,9 @@ export { fit_tasks_to_minutes } from "./planFit";
 export { detect_document_subject, detect_subject_from_text, infer_subject_from_text } from "./subjectInfer";
 export {
   ASSIGNMENT_HORIZON_DAYS,
+  ASSIGNMENT_RISK_THRESHOLD,
   assignment_countdown,
+  assignment_risk,
   build_assignment_schedule,
   estimate_assignment_minutes,
   is_assignment_overdue,
@@ -46,6 +48,7 @@ export {
   refresh_assignment_statuses,
   reschedule_overdue_items,
   type AssignmentDraft,
+  type AssignmentRisk,
 } from "./assignment";
 export {
   ASSIGNMENT_PACK_HEADER,

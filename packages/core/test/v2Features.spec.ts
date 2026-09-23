@@ -52,6 +52,7 @@ import type {
 import type { StudyPilotRunRequest } from "../src/protocol/frontend.js";
 import { buildTeachPrompt } from "../src/application/prompts.js";
 import {
+  assignment_risk,
   build_assignment_schedule,
   looks_like_assignment,
   parse_assignment_due,
@@ -2178,6 +2179,110 @@ describe("core v2：图谱掌握度热力（G1）", () => {
     // 反复载入演示数据不该把已经推进过的卡片再推一遍
     await core.loadDemoData();
     expect(core.getKgMastery().data!["mastered"]).toBe(data["mastered"]);
+  });
+});
+
+describe("core v2：逾期风险预警与最小启动（G4）", () => {
+  const TODAY = "2026-03-04";
+
+  function riskItem(patch: Partial<AssignmentItem> = {}): AssignmentItem {
+    return {
+      id: `risk-${++idCounter}`,
+      subject: "数学",
+      title: "第三章习题",
+      quantity: 20,
+      unit: "题",
+      due_date: "2026-03-05",
+      estimated_minutes: 60,
+      status: "pending",
+      done_at: "",
+      created_at: TODAY,
+      source_text: "数学第三章习题1-20明天交",
+      review_card_ids: [],
+      plan_id: "",
+      plan_version: null,
+      original_due_date: "",
+      rescheduled_at: "",
+      ...patch,
+    };
+  }
+
+  it("剩余量超过「剩余天数 × 日预算」八成才算可能逾期", () => {
+    // 明天交 = 今天 + 明天，两天 × 60 分钟 = 120 分钟可用
+    expect(assignment_risk(riskItem({ estimated_minutes: 60 }), TODAY, 60).at_risk).toBe(false);
+    expect(assignment_risk(riskItem({ estimated_minutes: 96 }), TODAY, 60).at_risk).toBe(false);
+    expect(assignment_risk(riskItem({ estimated_minutes: 120 }), TODAY, 60).at_risk).toBe(true);
+
+    const tight = assignment_risk(riskItem({ estimated_minutes: 300 }), TODAY, 60);
+    expect(tight.load).toBe(2.5);
+    expect(tight.capacity_minutes).toBe(120);
+
+    // 同样的量，截止日更远就不是风险了
+    expect(
+      assignment_risk(riskItem({ estimated_minutes: 300, due_date: "2026-03-11" }), TODAY, 60)
+        .at_risk,
+    ).toBe(false);
+  });
+
+  it("已完成不预警、已逾期交给红色信号、没有可用预算时直接算风险", () => {
+    expect(assignment_risk(riskItem({ status: "done" }), TODAY, 60).at_risk).toBe(false);
+    // 已逾期：剩余天数 0，不再报 at_risk（清单里已经有更重的红色「已逾期」）
+    expect(assignment_risk(riskItem({ due_date: "2026-03-03" }), TODAY, 60).at_risk).toBe(false);
+    // 日预算被课表挤成 0，只要还有量就是风险
+    const noBudget = assignment_risk(riskItem({ estimated_minutes: 30 }), TODAY, 0);
+    expect(noBudget.capacity_minutes).toBe(0);
+    expect(noBudget.at_risk).toBe(true);
+  });
+
+  it("看板快照只标出真正排不开的那条", async () => {
+    const core = createSynapseCore({
+      clock: { nowIso: () => `${TODAY}T09:00:00.000Z` },
+      idGen: testIdGen,
+    });
+    // 20 题 ≈ 60 分钟，明天交 → 60/(2×60)=0.5，安全
+    await core.createAssignments("default", "数学第三章习题1-20明天交");
+    let board = core.listAssignments("default").data as unknown as { at_risk_ids: string[] };
+    expect(board.at_risk_ids).toEqual([]);
+
+    // 100 页 ≈ 1000 分钟，明天交 → 早就超过 2 天 × 60 分钟的预算，提前亮黄灯
+    await core.createAssignments("default", "物理练习册第1页到第100页明天交");
+    board = core.listAssignments("default").data as unknown as { at_risk_ids: string[] };
+    const items = (core.listAssignments("default").data as unknown as { items: AssignmentItem[] })
+      .items;
+    const risky = items.find((item) => item.subject === "物理")!;
+    expect(risky.estimated_minutes).toBeGreaterThan(96);
+    expect(board.at_risk_ids).toEqual([risky.id]);
+  });
+
+  it("先学 5 分钟：复用同一条打卡链路，但只记 5 分钟用时", () => {
+    const core = createSynapseCore({
+      clock: { nowIso: () => `${TODAY}T09:00:00.000Z` },
+      idGen: testIdGen,
+    });
+    expect(core.addTodayItem("default", { title: "复习夹逼定理" }).success).toBe(true);
+
+    const today = (core.getTodayPlan("default").data as Record<string, unknown>)["today"] as {
+      items: Array<{ key: string; title: string; duration_minutes: number }>;
+    };
+    const target = today.items.find((item) => item.title === "复习夹逼定理")!;
+    // 任务本身不止 5 分钟，所以「记 5 分钟」必须是真的覆盖，而不是碰巧相等
+    expect(target.duration_minutes).toBeGreaterThan(5);
+
+    expect(core.toggleTodayItem("default", target.key, 5).success).toBe(true);
+    const record = core.store.get_progress("default")[target.key]!;
+    expect(record.done).toBe(true);
+    expect(record.actual_minutes).toBe(5);
+
+    // 不传第三个参数时仍是老行为：按任务原时长记录
+    expect(core.addTodayItem("default", { title: "整理错题" }).success).toBe(true);
+    const nextToday = (core.getTodayPlan("default").data as Record<string, unknown>)["today"] as {
+      items: Array<{ key: string; title: string; duration_minutes: number }>;
+    };
+    const plain = nextToday.items.find((item) => item.title === "整理错题")!;
+    expect(core.toggleTodayItem("default", plain.key).success).toBe(true);
+    expect(core.store.get_progress("default")[plain.key]!.actual_minutes).toBe(
+      plain.duration_minutes,
+    );
   });
 });
 
