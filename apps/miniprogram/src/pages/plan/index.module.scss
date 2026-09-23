@@ -585,6 +585,7 @@
 
 .reviewRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding: $spacing-sm 0;
@@ -651,4 +652,131 @@
   font-size: $font-size-xs;
   color: $color-text-secondary;
   white-space: nowrap;
+}
+
+/* G2：苏格拉底提示——只给方向，不直接给答案 */
+.reviewHint {
+  padding: 6rpx $spacing-md;
+  margin-right: $spacing-xs;
+  border-radius: $radius-button;
+  background: #fef3c7;
+  border: 1rpx solid rgba(217, 119, 6, 0.28);
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.reviewHintDone {
+  background: $color-bg-page;
+  border-color: $color-divider;
+}
+
+.reviewHintText {
+  font-size: $font-size-xs;
+  color: #b45309;
+  white-space: nowrap;
+}
+
+.hintPanel {
+  flex: 1 0 100%;
+  width: 100%;
+  margin-top: $spacing-sm;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.hintFlags {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.hintFlag {
+  padding: 2rpx 14rpx;
+  margin: 0 $spacing-xs $spacing-xs 0;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  background: $color-bg-card;
+  border: 1rpx solid $color-divider;
+  border-radius: $radius-round;
+}
+
+.hintFlagWarn {
+  color: #b45309;
+  background: #fef3c7;
+  border-color: rgba(217, 119, 6, 0.28);
+}
+
+.hintRow {
+  display: flex;
+  align-items: flex-start;
+  margin-top: $spacing-sm;
+}
+
+.hintTier {
+  flex-shrink: 0;
+  margin-right: $spacing-xs;
+  padding: 2rpx 12rpx;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.12);
+  border-radius: $radius-round;
+  white-space: nowrap;
+}
+
+.hintText {
+  flex: 1;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+}
+
+.hintAnswerButton {
+  margin-top: $spacing-md;
+  height: $button-height-sm;
+  border-radius: $radius-button;
+  background: rgba(91, 108, 255, 0.12);
+  @include flex-center;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.hintAnswerButtonLocked {
+  background: $color-bg-card;
+  border: 1rpx solid $color-divider;
+
+  &:active {
+    opacity: 1;
+  }
+}
+
+.hintAnswerButtonText {
+  font-size: $font-size-xs;
+  color: $color-primary;
+}
+
+.hintAnswer {
+  margin-top: $spacing-sm;
+  padding: $spacing-md;
+  background: $color-bg-card;
+  border-left: 6rpx solid $color-primary;
+  border-radius: $radius-sm;
+}
+
+.hintAnswerText {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  line-height: $line-height-loose;
+}
+
+.hintAnswerSource {
+  display: block;
+  margin-top: $spacing-xs;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
 }

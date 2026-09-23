@@ -333,6 +333,36 @@ export interface ReviewItem {
   total_reviews: number;
   lapses: number;
   created_at: string;
+  /**
+   * 苏格拉底三级提示（缓存）。
+   * 生成一次就存在卡片上：重复点击「提示我」不该再花一次模型调用，
+   * 离线生成的提示也一并缓存，保证同一张卡的提示前后一致。
+   */
+  hint_texts: string[];
+}
+
+/**
+ * 复习卡的苏格拉底提示结果。
+ *
+ * 产品立场：AI 克制地不直接给答案。先给方向、再给思路、最后给关键步骤，
+ * 三级都用完才允许看答案 —— 而那个答案是用户自己资料里的原文，不是模型编的。
+ */
+export interface ReviewHintResult {
+  review_id: string;
+  /** 题面：不看资料，讲出这个知识点 */
+  question: string;
+  /** 三级提示，固定 3 条（离线时也是 3 条规则化提示） */
+  hints: string[];
+  /** 标准答案；只能来自用户自己的资料或图谱，取不到就是空串 */
+  answer: string;
+  /** 答案来源（人话）；`answer` 为空时说明为什么取不到 */
+  answer_source: string;
+  /** true = 这一轮没用上模型（没配 Key / 调用失败 / 全被过滤），提示是离线规则版 */
+  degraded: boolean;
+  /** true = 直接读的卡片缓存，没有重复调模型 */
+  cached: boolean;
+  /** 被判定会泄露答案、已替换成离线提示的条数 */
+  filtered: number;
 }
 
 /**

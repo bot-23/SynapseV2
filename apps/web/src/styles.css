@@ -2449,6 +2449,7 @@ svg {
 
 .review-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -2510,6 +2511,125 @@ svg {
 .review-pass:hover,
 .review-fail:hover {
   opacity: 0.85;
+}
+
+/* G2：苏格拉底三级提示（先给方向，再给思路，最后给步骤；用完才可看答案） */
+.review-hint {
+  height: 30px;
+  padding: 0 14px;
+  color: #b45309;
+  font-size: 11.5px;
+  font-weight: 650;
+  background: #fef3c7;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: opacity 180ms ease;
+}
+
+.review-hint:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.review-hint:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.review-hint-panel {
+  flex: 1 0 100%;
+  padding: 12px 14px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-md);
+}
+
+.review-hint-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-hint-flag {
+  padding: 2px 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  background: #fff;
+  border: 1px solid var(--warm-border);
+  border-radius: var(--radius-full);
+}
+
+.review-hint-flag.warn {
+  color: #b45309;
+  background: #fef3c7;
+  border-color: rgba(217, 119, 6, 0.28);
+}
+
+.review-hint-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.review-hint-list li {
+  margin-bottom: 8px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.review-hint-tier {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 8px;
+  color: var(--brand);
+  font-size: 10.5px;
+  font-weight: 650;
+  background: var(--brand-light);
+  border-radius: var(--radius-full);
+}
+
+.review-hint-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.review-answer-button {
+  height: 30px;
+  padding: 0 14px;
+  color: var(--brand);
+  font-size: 11.5px;
+  font-weight: 650;
+  background: var(--brand-light);
+  border: 1px solid var(--brand-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.review-answer-button:disabled {
+  color: var(--text-faint);
+  background: #fff;
+  border-color: var(--warm-border);
+  cursor: not-allowed;
+}
+
+.review-answer {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius-sm);
+}
+
+.review-answer-text {
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.review-answer-source {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 /* ============================================================

@@ -556,7 +556,13 @@ export class RuntimeStore {
 
   get_reviews(userId: string): ReviewItem[] {
     const rows = this.readJson<ReviewItem[]>(`review:${userId}`, []);
-    return Array.isArray(rows) ? rows : [];
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    // G2 新增了 hint_texts：旧数据读取侧补默认值，不需要迁移
+    return rows.map((row) =>
+      Array.isArray(row?.hint_texts) ? row : { ...row, hint_texts: [] },
+    );
   }
 
   save_reviews(userId: string, items: ReviewItem[]): ReviewItem[] {

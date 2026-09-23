@@ -62,6 +62,7 @@ import type { ProviderBundle } from "../providers/contracts.js";
 import type { RuntimeStore } from "../storage/runtimeStore.js";
 import { ALL_TOOLS, toOpenaiTools } from "./tools.js";
 import { AssignmentService } from "./assignmentService.js";
+import { HintService } from "./hintService.js";
 import {
   buildConversationalReplyPrompt,
   buildIntentPrompt,
@@ -144,6 +145,14 @@ export class StudyPlanWorkflowService {
    */
   get assignment_service(): AssignmentService {
     return new AssignmentService(this.runtime_store, this.providers.llm, this.clock, this.idGen);
+  }
+
+  /**
+   * G2：苏格拉底提示服务。
+   * 同样每次取用时新建，理由与 `assignment_service` 一致：绝不能抓着构造时的旧模型引用。
+   */
+  get hint_service(): HintService {
+    return new HintService(this.runtime_store, this.providers.llm);
   }
 
   async build_study_plan(

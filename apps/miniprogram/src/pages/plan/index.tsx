@@ -8,6 +8,7 @@ import {
   plan_task_key,
   type LongTermPlan,
   type Milestone,
+  type ReviewHintResult,
   type ReviewItem,
   type StudyDayPlan,
   type TodayPlan
@@ -17,6 +18,9 @@ import { formatDuration, formatRelativeTime } from '../../utils/format'
 import styles from './index.module.scss'
 
 type TabKey = 'today' | 'short' | 'long' | 'review'
+
+/** 三级提示的档位名，与 core 的 HINT_TIERS 一一对应。 */
+const HINT_TIER_LABELS = ['知识点方向', '解题思路', '关键步骤']
 
 interface PlanView {
   message: string
@@ -56,6 +60,10 @@ export default function PlanPage() {
   const [topicSubject, setTopicSubject] = useState('')
   const [topicName, setTopicName] = useState('')
   const [busy, setBusy] = useState(false)
+  /** G2：当前展开的复习卡提示面板 */
+  const [hintPanel, setHintPanel] = useState<{ id: string; data: ReviewHintResult } | null>(null)
+  const [hintRevealed, setHintRevealed] = useState(0)
+  const [hintAnswerOpen, setHintAnswerOpen] = useState(false)
 
   const load = useCallback(() => {
     const core = getCore()
@@ -301,7 +309,31 @@ export default function PlanPage() {
     const result = getCore().reviewItem(DEFAULT_USER_ID, item.id, grade)
     console.log('[Synapse] 复习评分', item.topic, grade, result.success)
     Taro.showToast({ title: result.message, icon: 'none' })
+    // 评完分就收起提示面板，下一张卡从零开始
+    if (hintPanel?.id === item.id) {
+      setHintPanel(null)
+    }
     load()
+  }
+
+  /**
+   * G2「提示我」：第一次点取提示（可能走一次模型，之后直读缓存），
+   * 同一张卡再点就是「再揭示一条」——依次给方向、思路、步骤，全部揭示完才允许看答案。
+   */
+  const askHint = async (item: ReviewItem) => {
+    if (hintPanel?.id === item.id) {
+      setHintRevealed((current) => Math.min(hintPanel.data.hints.length, current + 1))
+      return
+    }
+    const result = await getCore().getReviewHints(DEFAULT_USER_ID, item.id)
+    console.log('[Synapse] 复习提示', item.id, result.success, result.message)
+    if (!result.success) {
+      Taro.showToast({ title: result.message || '提示获取失败', icon: 'none' })
+      return
+    }
+    setHintPanel({ id: item.id, data: result.data as unknown as ReviewHintResult })
+    setHintRevealed(1)
+    setHintAnswerOpen(false)
   }
 
   const addTopic = () => {
@@ -745,6 +777,23 @@ export default function PlanPage() {
                   </Text>
                 </View>
                 <View className={styles.reviewActions}>
+                  <View
+                    className={classnames(
+                      styles.reviewHint,
+                      hintPanel?.id === item.id &&
+                        hintRevealed >= hintPanel.data.hints.length &&
+                        styles.reviewHintDone
+                    )}
+                    onClick={() => askHint(item)}
+                  >
+                    <Text className={styles.reviewHintText}>
+                      {hintPanel?.id !== item.id
+                        ? '提示我'
+                        : hintRevealed >= hintPanel.data.hints.length
+                          ? '提示给完了'
+                          : '再提示一点'}
+                    </Text>
+                  </View>
                   <View className={styles.reviewPass} onClick={() => gradeReview(item, 5)}>
                     <Text className={styles.reviewActionTextLight}>记得</Text>
                   </View>
@@ -752,6 +801,62 @@ export default function PlanPage() {
                     <Text className={styles.reviewActionTextDark}>忘了</Text>
                   </View>
                 </View>
+
+                {hintPanel?.id === item.id && (
+                  <View className={styles.hintPanel}>
+                    <View className={styles.hintFlags}>
+                      <Text className={styles.hintFlag}>苏格拉底提示 · 不直接给答案</Text>
+                      {!!hintPanel.data.degraded && (
+                        <Text className={classnames(styles.hintFlag, styles.hintFlagWarn)}>
+                          离线提示
+                        </Text>
+                      )}
+                      {!!hintPanel.data.cached && (
+                        <Text className={styles.hintFlag}>已缓存</Text>
+                      )}
+                      {!!hintPanel.data.filtered && (
+                        <Text className={classnames(styles.hintFlag, styles.hintFlagWarn)}>
+                          已拦下 {hintPanel.data.filtered} 条会泄露答案的提示
+                        </Text>
+                      )}
+                    </View>
+                    {hintPanel.data.hints.slice(0, hintRevealed).map((text, index) => (
+                      <View key={`${item.id}-hint-${index}`} className={styles.hintRow}>
+                        <Text className={styles.hintTier}>
+                          {HINT_TIER_LABELS[index] ?? `第 ${index + 1} 级`}
+                        </Text>
+                        <Text className={styles.hintText}>{text}</Text>
+                      </View>
+                    ))}
+                    <View
+                      className={classnames(
+                        styles.hintAnswerButton,
+                        hintRevealed < hintPanel.data.hints.length && styles.hintAnswerButtonLocked
+                      )}
+                      onClick={() => {
+                        if (hintRevealed >= hintPanel.data.hints.length) {
+                          setHintAnswerOpen(true)
+                        }
+                      }}
+                    >
+                      <Text className={styles.hintAnswerButtonText}>
+                        {hintRevealed < hintPanel.data.hints.length
+                          ? '三级提示用完才可看答案'
+                          : '查看答案'}
+                      </Text>
+                    </View>
+                    {hintAnswerOpen && (
+                      <View className={styles.hintAnswer}>
+                        <Text className={styles.hintAnswerText}>
+                          {hintPanel.data.answer || '这道题暂时没有可用的标准答案'}
+                        </Text>
+                        <Text className={styles.hintAnswerSource}>
+                          依据：{hintPanel.data.answer_source}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
             ))}
           </View>

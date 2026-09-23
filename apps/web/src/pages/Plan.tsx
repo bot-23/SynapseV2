@@ -5,6 +5,7 @@ import {
   plan_task_key,
   type LongTermPlan,
   type Milestone,
+  type ReviewHintResult,
   type ReviewItem,
   type StudyDayPlan,
   type TodayPlan,
@@ -12,6 +13,9 @@ import {
 import { taskTypeLabel, formatDuration, formatRelativeTime } from '../utils/format'
 
 type TabKey = 'today' | 'short' | 'long' | 'review'
+
+/** 三级提示的档位名，与 core 的 HINT_TIERS 一一对应。 */
+const HINT_TIER_LABELS = ['知识点方向', '解题思路', '关键步骤']
 
 interface PlanView {
   message: string
@@ -51,6 +55,10 @@ export default function PlanView() {
   const [topicName, setTopicName] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  /** G2：当前展开的复习卡提示面板 */
+  const [hintPanel, setHintPanel] = useState<{ id: string; data: ReviewHintResult } | null>(null)
+  const [hintRevealed, setHintRevealed] = useState(0)
+  const [hintAnswerOpen, setHintAnswerOpen] = useState(false)
 
   const flash = (message: string) => {
     setNotice(message)
@@ -292,7 +300,31 @@ export default function PlanView() {
     const result = getCore().reviewItem(DEFAULT_USER_ID, item.id, grade)
     console.log('[Synapse] 复习评分', item.topic, grade, result.success)
     flash(result.message)
+    // 评完分就收起提示面板，下一张卡从零开始
+    if (hintPanel?.id === item.id) {
+      setHintPanel(null)
+    }
     load()
+  }
+
+  /**
+   * G2「提示我」：第一次点取提示（可能走一次模型，之后直读缓存），
+   * 同一张卡再点就是「再揭示一条」——依次给方向、思路、步骤，全部揭示完才允许看答案。
+   */
+  const askHint = async (item: ReviewItem) => {
+    if (hintPanel?.id === item.id) {
+      setHintRevealed((current) => Math.min(hintPanel.data.hints.length, current + 1))
+      return
+    }
+    const result = await getCore().getReviewHints(DEFAULT_USER_ID, item.id)
+    console.log('[Synapse] 复习提示', item.id, result.success, result.message)
+    if (!result.success) {
+      flash(result.message || '提示获取失败')
+      return
+    }
+    setHintPanel({ id: item.id, data: result.data as unknown as ReviewHintResult })
+    setHintRevealed(1)
+    setHintAnswerOpen(false)
   }
 
   const addTopic = () => {
@@ -677,6 +709,20 @@ export default function PlanView() {
                   </div>
                 </div>
                 <div className="review-actions">
+                  <button
+                    type="button"
+                    className="review-hint"
+                    disabled={
+                      hintPanel?.id === item.id && hintRevealed >= hintPanel.data.hints.length
+                    }
+                    onClick={() => void askHint(item)}
+                  >
+                    {hintPanel?.id !== item.id
+                      ? '提示我'
+                      : hintRevealed >= hintPanel.data.hints.length
+                        ? '提示给完了'
+                        : '再提示一点'}
+                  </button>
                   <button type="button" className="review-pass" onClick={() => gradeReview(item, 5)}>
                     记得
                   </button>
@@ -684,6 +730,55 @@ export default function PlanView() {
                     忘了
                   </button>
                 </div>
+
+                {hintPanel?.id === item.id && (
+                  <div className="review-hint-panel">
+                    <div className="review-hint-flags">
+                      <span className="review-hint-flag">苏格拉底提示 · 不直接给答案</span>
+                      {hintPanel.data.degraded && (
+                        <span className="review-hint-flag warn">离线提示</span>
+                      )}
+                      {hintPanel.data.cached && <span className="review-hint-flag">已缓存</span>}
+                      {!!hintPanel.data.filtered && (
+                        <span className="review-hint-flag warn">
+                          已拦下 {hintPanel.data.filtered} 条会泄露答案的提示
+                        </span>
+                      )}
+                    </div>
+                    <ol className="review-hint-list">
+                      {hintPanel.data.hints.slice(0, hintRevealed).map((text, index) => (
+                        <li key={`${item.id}-hint-${index}`}>
+                          <span className="review-hint-tier">
+                            {HINT_TIER_LABELS[index] ?? `第 ${index + 1} 级`}
+                          </span>
+                          <span className="review-hint-text">{text}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="review-hint-foot">
+                      <button
+                        type="button"
+                        className="review-answer-button"
+                        disabled={hintRevealed < hintPanel.data.hints.length}
+                        onClick={() => setHintAnswerOpen(true)}
+                      >
+                        {hintRevealed < hintPanel.data.hints.length
+                          ? '三级提示用完才可看答案'
+                          : '查看答案'}
+                      </button>
+                    </div>
+                    {hintAnswerOpen && (
+                      <div className="review-answer">
+                        <div className="review-answer-text">
+                          {hintPanel.data.answer || '这道题暂时没有可用的标准答案'}
+                        </div>
+                        <div className="review-answer-source">
+                          依据：{hintPanel.data.answer_source}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

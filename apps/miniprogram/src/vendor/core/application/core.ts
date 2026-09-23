@@ -917,6 +917,31 @@ export class SynapseCore {
   }
 
   /**
+   * G2：复习卡的苏格拉底三级提示。
+   *
+   * 首次调用可能走一次模型（结果缓存到卡片上），之后再点直接读缓存；
+   * 没配 Key / 调用失败时返回离线规则提示并标 `degraded`，绝不静默失败。
+   */
+  async getReviewHints(
+    userId: string,
+    reviewId: string,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    try {
+      const result = await this.workflow.hint_service.reveal(userId || "default", reviewId);
+      const message = result.degraded
+        ? "这是离线提示（没配模型 Key 或调用失败），答案仍来自你自己的资料"
+        : result.cached
+          ? "用的是这张卡已缓存的提示"
+          : result.filtered
+            ? `模型有 ${result.filtered} 条提示会泄露答案，已换成离线提示`
+            : "提示已生成，先自己想，实在不行再点「查看答案」";
+      return apiOk(result as unknown as Record<string, unknown>, message);
+    } catch (error) {
+      return apiFail(`提示生成失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * 今天该排的复习项：按到期日排序，并限制每天条数。
    * 上限很关键 —— 积压一次全堆上来，计划就一定做不完，整个系统就废了。
    */

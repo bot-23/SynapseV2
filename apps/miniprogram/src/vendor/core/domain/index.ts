@@ -81,6 +81,13 @@ export {
   review_key,
 } from "./review";
 export {
+  HINT_TIERS,
+  LEAK_WINDOW,
+  build_offline_hints,
+  find_leaked_span,
+  hints_leak_answer,
+} from "./reviewHints";
+export {
   build_index as build_bm25_index,
   search_index as search_bm25_index,
   tokenize as tokenize_for_index,

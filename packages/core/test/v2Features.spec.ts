@@ -46,6 +46,7 @@ import type {
 import type {
   AssignmentItem,
   KnowledgeMasteryEntry,
+  ReviewHintResult,
   StudyPlanRequest,
   TimetableEntry,
 } from "../src/protocol/study.js";
@@ -64,6 +65,11 @@ import {
   encode_assignment_pack,
 } from "../src/domain/assignmentPack.js";
 import { compute_mastery, summarize_mastery } from "../src/domain/kgMastery.js";
+import {
+  build_offline_hints,
+  find_leaked_span,
+  hints_leak_answer,
+} from "../src/domain/reviewHints.js";
 import { KgBuilder } from "../src/application/kgBuilder.js";
 import { KgRetrievalProvider } from "../src/providers/kgRetrieval.js";
 
@@ -2283,6 +2289,146 @@ describe("core v2：逾期风险预警与最小启动（G4）", () => {
     expect(core.store.get_progress("default")[plain.key]!.actual_minutes).toBe(
       plain.duration_minutes,
     );
+  });
+});
+
+describe("core v2：苏格拉底提示（G2）", () => {
+  const TODAY = "2026-03-04";
+  const fixedClock = { nowIso: () => `${TODAY}T09:00:00.000Z` };
+  const NOTE = "函数与导数：含参函数单调性讨论要先求导，再按参数分类讨论。";
+
+  /** 自称 deepseek 的假模型，吐固定的 JSON 提示。 */
+  class HintLlm implements LlmProvider {
+    readonly prompts: string[] = [];
+
+    constructor(private readonly payload: Record<string, unknown>) {}
+
+    describe(): Record<string, unknown> {
+      return { provider: "deepseek", model: "hint-llm", status: "ready" };
+    }
+
+    async generateWithTools(): Promise<GenerateWithToolsResult> {
+      return { tool_calls: [] };
+    }
+
+    async generateText(): Promise<string> {
+      return "";
+    }
+
+    async generateJson(prompt: string): Promise<Record<string, unknown>> {
+      this.prompts.push(prompt);
+      return this.payload;
+    }
+
+    async *streamText(): AsyncIterable<string> {
+      yield "";
+    }
+  }
+
+  /** 造一张挂在真实资料上的复习卡：答案才有原文可取。 */
+  function coreWithCard(): { core: SynapseCore; cardId: string } {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.importDocument("default", "高三数学错题笔记.txt", NOTE);
+    core.addReviewTopic("default", "数学", "含参函数单调性");
+    return { core, cardId: core.store.get_reviews("default")[0]!.id };
+  }
+
+  it("有 Key 时由模型生成三级提示，并把提示缓存到卡片上", async () => {
+    const { core, cardId } = coreWithCard();
+    const llm = new HintLlm({
+      hints: ["先想它属于函数哪一类问题", "把参数分开讨论", "第一步先求导"],
+    });
+    core.workflow.providers = { ...core.workflow.providers, llm };
+
+    const result = await core.getReviewHints("default", cardId);
+    expect(result.success).toBe(true);
+    const data = result.data as unknown as ReviewHintResult;
+    expect(data.hints).toHaveLength(3);
+    expect(data.degraded).toBe(false);
+    expect(data.cached).toBe(false);
+    expect(data.filtered).toBe(0);
+
+    // 提示词必须把标准答案交给模型，同时明确禁止泄露
+    expect(llm.prompts[0]).toContain("含参函数单调性");
+    expect(llm.prompts[0]).toContain("绝对不能出现在提示里");
+
+    expect(core.store.get_reviews("default")[0]!.hint_texts).toEqual(data.hints);
+  });
+
+  it("重复点击直接读缓存，不再调模型", async () => {
+    const { core, cardId } = coreWithCard();
+    const llm = new HintLlm({ hints: ["提示一", "提示二", "提示三"] });
+    core.workflow.providers = { ...core.workflow.providers, llm };
+
+    await core.getReviewHints("default", cardId);
+    expect(llm.prompts).toHaveLength(1);
+
+    const second = await core.getReviewHints("default", cardId);
+    expect(llm.prompts).toHaveLength(1);
+    expect((second.data as unknown as ReviewHintResult).cached).toBe(true);
+    expect((second.data as unknown as ReviewHintResult).hints).toEqual(["提示一", "提示二", "提示三"]);
+  });
+
+  it("没配 Key 时返回离线三级提示并标 degraded，绝不静默失败", async () => {
+    const { core, cardId } = coreWithCard();
+
+    const result = await core.getReviewHints("default", cardId);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("离线提示");
+    const data = result.data as unknown as ReviewHintResult;
+    expect(data.degraded).toBe(true);
+    expect(data.hints).toHaveLength(3);
+    // 离线提示是纯函数，不缓存——否则下次再点 `degraded` 就没法如实标记了
+    expect(core.store.get_reviews("default")[0]!.hint_texts).toEqual([]);
+  });
+
+  it("模型把答案原话说出去时，那一条会被换成离线提示并计数", async () => {
+    const { core, cardId } = coreWithCard();
+    const llm = new HintLlm({
+      hints: ["含参函数单调性讨论要先求导，再按参数分类讨论", "把参数分开讨论", "第一步先求导"],
+    });
+    core.workflow.providers = { ...core.workflow.providers, llm };
+
+    const data = (await core.getReviewHints("default", cardId))
+      .data as unknown as ReviewHintResult;
+    expect(data.filtered).toBe(1);
+    expect(data.hints[0]).not.toContain("含参函数单调性讨论要先求导");
+    expect(data.hints[1]).toBe("把参数分开讨论");
+    // 有泄露就不落缓存：下次点击相当于让模型重试一次
+    expect(core.store.get_reviews("default")[0]!.hint_texts).toEqual([]);
+  });
+
+  it("答案只从用户自己的材料里取，取不到就留空并说明原因", async () => {
+    const { core, cardId } = coreWithCard();
+    const data = (await core.getReviewHints("default", cardId))
+      .data as unknown as ReviewHintResult;
+    expect(data.answer).toContain("含参函数单调性讨论要先求导");
+    expect(data.answer_source).toContain("高三数学错题笔记.txt");
+
+    // 队列里手动加的知识点没有对应资料，答案必须留空而不是编一个
+    core.addReviewTopic("default", "物理", "刚体转动惯量");
+    const other = core.store.get_reviews("default").find((item) => item.topic === "刚体转动惯量")!;
+    const bare = (await core.getReviewHints("default", other.id))
+      .data as unknown as ReviewHintResult;
+    expect(bare.answer).toBe("");
+    expect(bare.answer_source).toContain("还没有对应的资料");
+  });
+
+  it("泄露校验：连续 6 字重合才算泄露，太短的答案不判泄露", () => {
+    expect(find_leaked_span("含参函数单调性讨论要先求导", "含参函数单调性讨论要先求导，再按参数分类")).toBe(
+      "含参函数单调",
+    );
+    expect(find_leaked_span("单调性要怎么判断", "含参函数单调性讨论要先求导")).toBeNull();
+    // 答案本身太短时不做判定，否则任何提示都会被误杀
+    expect(find_leaked_span("先求导", "求导")).toBeNull();
+
+    expect(
+      hints_leak_answer(["含参函数单调性讨论要先求导"], "含参函数单调性讨论要先求导，再按参数分类"),
+    ).toBe(true);
+    expect(hints_leak_answer(["先想它属于函数哪一类", "把参数分开看"], "含参函数单调性讨论要先求导")).toBe(
+      false,
+    );
+    expect(build_offline_hints("数学", "含参函数单调性")[0]).toContain("数学·含参函数单调性");
   });
 });
 

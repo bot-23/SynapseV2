@@ -48,6 +48,7 @@ export function create_review_item(args: {
     total_reviews: 0,
     lapses: 0,
     created_at: args.today,
+    hint_texts: [],
   };
 }
 
