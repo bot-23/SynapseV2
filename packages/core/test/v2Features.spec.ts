@@ -47,6 +47,7 @@ import type {
   AssignmentItem,
   KnowledgeMasteryEntry,
   ReviewHintResult,
+  StudyDayPlan,
   StudyPlanRequest,
   TimetableEntry,
   WeeklyReport,
@@ -66,6 +67,7 @@ import {
   encode_assignment_pack,
 } from "../src/domain/assignmentPack.js";
 import { compute_mastery, summarize_mastery } from "../src/domain/kgMastery.js";
+import { build_plan_evidence } from "../src/domain/planEvidence.js";
 import {
   build_offline_narrative,
   compute_streak,
@@ -2637,6 +2639,115 @@ describe("core v2：学情周报（G3）", () => {
 
     core.deleteAllUserData("default");
     expect(core.store.get_reports("default")).toEqual([]);
+  });
+});
+
+describe("core v2：AI 依据展开（G4.3）", () => {
+  const PLAN: StudyDayPlan[] = [
+    {
+      day_index: 1,
+      focus: "函数与导数回顾",
+      tasks: [
+        {
+          title: "整理含参函数单调性错因",
+          subject: "数学",
+          task_type: "review",
+          duration_minutes: 25,
+          reason: "先定位高频失分原因",
+        },
+        {
+          title: "极限定义专项练习",
+          subject: "数学",
+          task_type: "practice",
+          duration_minutes: 30,
+          reason: "针对薄弱点极限定义加强",
+        },
+      ],
+      carry_over: [],
+    },
+    {
+      day_index: 2,
+      focus: "词汇与阅读",
+      tasks: [
+        {
+          title: "背诵四级核心词 50 个",
+          subject: "英语",
+          task_type: "learn",
+          duration_minutes: 20,
+          reason: "词汇量是阅读的基础",
+        },
+      ],
+      carry_over: [],
+    },
+  ];
+
+  const REQUEST: StudyPlanRequest = {
+    user_id: "default",
+    current_level: "高三",
+    learning_goal: "我要复习数学和英语",
+    available_days_per_week: 5,
+    available_minutes_per_day: 90,
+    deadline: "2026-06-20",
+    weak_points: ["极限定义", "听力"],
+    preferences: [],
+    need_user_confirmation: false,
+  };
+
+  it("把「资料原文 / 图谱路径 / 规则命中」三类证据分开放，规则项都带真实数字", () => {
+    const evidence = build_plan_evidence({
+      context: [
+        "资料命中[高三数学错题笔记.txt]: 含参函数单调性讨论要先求导。",
+        "资料命中[英语词汇手册.txt]: 高频词按词根分组记忆。",
+        "图谱学习路径：函数 → 导数 → 单调性",
+        "最近执行情况：已完成 2/3 个记录任务。",
+        "课程表：周一 08:00-09:40 高等数学",
+        "长期偏好：你更适合先做题再回补。",
+        // 认不出来的行要落进 other，而不是被当成资料或图谱
+        "随便一句没分类的话",
+      ],
+      weeklyPlan: PLAN,
+      request: REQUEST,
+    });
+
+    expect(evidence.documents.map((hit) => hit.file_name)).toEqual([
+      "高三数学错题笔记.txt",
+      "英语词汇手册.txt",
+    ]);
+    expect(evidence.documents[0]!.excerpt).toContain("含参函数单调性讨论要先求导");
+    expect(evidence.graph_paths).toEqual(["图谱学习路径：函数 → 导数 → 单调性"]);
+    expect(evidence.others.map((item) => item.source)).toEqual([
+      "progress",
+      "timetable",
+      "profile",
+    ]);
+
+    // 规则命中：每天总量取最大的一天（25+30=55），而不是总和
+    expect(evidence.rules).toContain("每天任务总量控制在 55 分钟以内");
+    expect(evidence.rules).toContain("排了 1 项复习任务，新学的内容会回流到复习队列");
+    expect(evidence.rules).toContain("2 个科目按天并行，各自占用当天的剩余预算");
+    // 「极限定义」在任务里出现过，「听力」没有：只报真的被覆盖到的那个
+    expect(evidence.rules).toContain("优先覆盖你提到的薄弱点：极限定义");
+    expect(evidence.rules.some((rule) => rule.includes("听力"))).toBe(false);
+    expect(evidence.rules).toContain("节奏参考你给的截止时间 2026-06-20");
+    expect(evidence.rules).toContain("避让了课程表里的 1 个上课时段");
+    expect(evidence.rules).toContain("按最近的执行记录调整了任务量");
+    expect(evidence.rules).toContain("沿用了画像里的学习方式偏好");
+  });
+
+  it("没有上下文或没有计划时不崩，也不编造规则", () => {
+    const empty = build_plan_evidence({ weeklyPlan: [] });
+    expect(empty.documents).toEqual([]);
+    expect(empty.graph_paths).toEqual([]);
+    expect(empty.others).toEqual([]);
+    expect(empty.rules).toEqual([]);
+
+    // 只有计划、没有任何请求与上下文时，只报能从计划本身读出来的规则
+    const planOnly = build_plan_evidence({ weeklyPlan: PLAN });
+    expect(planOnly.rules).toEqual([
+      "每天任务总量控制在 55 分钟以内",
+      "排了 1 项复习任务，新学的内容会回流到复习队列",
+      "2 个科目按天并行，各自占用当天的剩余预算",
+    ]);
   });
 });
 

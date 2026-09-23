@@ -237,6 +237,8 @@ export default function ChatView({ conversationId, onChangeConversation }: ChatV
                     <PlanCard
                       weeklyPlan={message.weeklyPlan}
                       retrievedContext={message.retrievedContext}
+                      request={message.normalized}
+                      reason={message.reason}
                     />
                   )}
                 </div>

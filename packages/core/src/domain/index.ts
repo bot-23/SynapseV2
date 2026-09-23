@@ -67,6 +67,10 @@ export {
   type MasteryNodeInput,
 } from "./kgMastery.js";
 export { pyRound } from "./pyCompat.js";
+export {
+  build_plan_evidence,
+  type PlanEvidence,
+} from "./planEvidence.js";
 export { add_days, days_between, to_date } from "./dateMath.js";
 export {
   NARRATIVE_MAX_CHARS,

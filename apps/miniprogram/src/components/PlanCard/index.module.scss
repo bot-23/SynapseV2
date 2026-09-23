@@ -95,6 +95,75 @@
   color: $color-primary;
 }
 
+/* G4.3：AI 依据展开——资料原文 / 图谱路径 / 命中的规则 */
+.evidence {
+  margin-top: $spacing-sm;
+}
+
+.evidenceToggle {
+  font-size: $font-size-xs;
+  color: $color-primary;
+  background: rgba(91, 108, 255, 0.12);
+  border-radius: $radius-button;
+  line-height: 2.2;
+}
+
+.evidenceBody {
+  margin-top: $spacing-sm;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.evidenceReason {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+  padding-bottom: $spacing-sm;
+  margin-bottom: $spacing-xs;
+  border-bottom: 1rpx dashed $color-divider;
+}
+
+.evidenceGroup {
+  margin-top: $spacing-sm;
+}
+
+.evidenceTitle {
+  display: block;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  color: $color-text-tertiary;
+}
+
+.evidenceBullet {
+  display: block;
+  margin-top: 6rpx;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+}
+
+.evidenceItem {
+  margin-top: $spacing-xs;
+  padding-left: $spacing-xs;
+  border-left: 4rpx solid rgba(91, 108, 255, 0.24);
+}
+
+.evidenceName {
+  display: block;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $color-primary;
+}
+
+.evidenceText {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+}
+
 .dayBlock {
   background: $color-bg-page;
   border-radius: $radius-md;

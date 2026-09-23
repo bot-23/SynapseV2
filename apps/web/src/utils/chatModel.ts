@@ -9,6 +9,8 @@ export interface ChatMessageView {
   id: string
   role: 'user' | 'assistant'
   content: string
+  /** 这条回复「为什么这么安排」（落库的 reason），G4.3 依据面板直接展示 */
+  reason: string
   weeklyPlan: StudyDayPlan[]
   retrievedContext: string[]
   blockPlan: BlockPlan | null
@@ -40,6 +42,7 @@ export function localMessage(
     id,
     role,
     content,
+    reason: '',
     weeklyPlan: [],
     retrievedContext: [],
     blockPlan: null,
@@ -66,6 +69,7 @@ export function toChatMessages(records: Array<Record<string, unknown>>): ChatMes
       id: String(record['id'] ?? ''),
       role: record['role'] === 'user' ? 'user' : 'assistant',
       content: String(record['content'] ?? ''),
+      reason: String(record['reason'] ?? ''),
       weeklyPlan: planData?.weekly_plan ?? [],
       retrievedContext: planData?.retrieved_context ?? [],
       blockPlan: context?.blockPlan ?? null,

@@ -915,6 +915,85 @@ svg {
   line-height: 1.5;
 }
 
+/* ---- AI 依据展开（G4.3） ---- */
+.plan-evidence {
+  margin-bottom: 14px;
+}
+
+.plan-evidence-toggle {
+  height: 28px;
+  padding: 0 12px;
+  color: var(--brand);
+  font-size: 11.5px;
+  font-weight: 650;
+  background: var(--brand-light);
+  border: 1px solid var(--brand-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.plan-evidence-toggle:hover {
+  opacity: 0.85;
+}
+
+.plan-evidence-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-md);
+}
+
+.plan-evidence-reason {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.65;
+  border-bottom: 1px dashed var(--warm-border);
+}
+
+.plan-evidence-group + .plan-evidence-group {
+  margin-top: 10px;
+}
+
+.plan-evidence-title {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.plan-evidence-list {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.plan-evidence-list li {
+  margin-bottom: 4px;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.plan-evidence-item {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--brand-subtle);
+}
+
+.plan-evidence-name {
+  display: block;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.plan-evidence-text {
+  display: block;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .plan-day-block {
   margin-bottom: 16px;
 }

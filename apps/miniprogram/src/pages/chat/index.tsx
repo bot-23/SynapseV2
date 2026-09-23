@@ -242,6 +242,8 @@ export default function ChatPage() {
               <PlanCard
                 weeklyPlan={message.weeklyPlan}
                 retrievedContext={message.retrievedContext}
+                request={message.normalized}
+                reason={message.reason}
               />
             )}
           </View>

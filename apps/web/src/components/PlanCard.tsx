@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import {
+  build_plan_evidence,
   collect_document_hits,
   group_tasks_by_subject,
   summarize_context_sources,
   type StudyDayPlan,
+  type StudyPlanRequest,
 } from '@synapse/core'
 import { taskTypeLabel } from '../utils/format'
 import { formatDuration } from '../utils/format'
@@ -13,6 +15,16 @@ interface PlanCardProps {
   retrievedContext?: string[]
   message?: string
   changeSummary?: string
+  /** 归一化后的请求（透传，用于复述「这版是按什么约束排的」） */
+  request?: StudyPlanRequest | null
+  /** 计划生成时给出的理由（透传，来自落库的 reason） */
+  reason?: string
+}
+
+const EVIDENCE_SOURCE_LABELS: Record<string, string> = {
+  timetable: '课程表',
+  progress: '执行记录',
+  profile: '画像',
 }
 
 /** 计划卡片：按科目分组展示每天任务（一份周计划内区分多科目） */
@@ -21,8 +33,11 @@ export default function PlanCard({
   retrievedContext = [],
   message,
   changeSummary,
+  request = null,
+  reason = '',
 }: PlanCardProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [showEvidence, setShowEvidence] = useState(false)
 
   if (!weeklyPlan.length) {
     return null
@@ -47,6 +62,14 @@ export default function PlanCard({
     ...new Set(collect_document_hits(retrievedContext).map((hit) => hit.file_name)),
   ]
 
+  // G4.3：把「已经存在的证据」摊开——资料原文片段 / 图谱路径 / 命中的规则
+  const evidence = build_plan_evidence({ context: retrievedContext, weeklyPlan, request })
+  const hasEvidence =
+    evidence.documents.length > 0 ||
+    evidence.graph_paths.length > 0 ||
+    evidence.others.length > 0 ||
+    evidence.rules.length > 0
+
   return (
     <div className="plan-card">
       <div className="plan-card-header" onClick={() => setCollapsed(!collapsed)}>
@@ -70,6 +93,74 @@ export default function PlanCard({
       {!!documentNames.length && (
         <div className="plan-source-evidence">
           依据：你的资料《{documentNames.join('》《')}》
+        </div>
+      )}
+
+      {hasEvidence && (
+        <div className="plan-evidence">
+          <button
+            type="button"
+            className="plan-evidence-toggle"
+            onClick={() => setShowEvidence(!showEvidence)}
+          >
+            {showEvidence ? '收起依据' : 'AI 为什么这么安排'}
+          </button>
+          {showEvidence && (
+            <div className="plan-evidence-body">
+              {!!reason && <div className="plan-evidence-reason">{reason}</div>}
+
+              {evidence.rules.length > 0 && (
+                <div className="plan-evidence-group">
+                  <div className="plan-evidence-title">命中的规则（{evidence.rules.length}）</div>
+                  <ul className="plan-evidence-list">
+                    {evidence.rules.map((rule, index) => (
+                      <li key={`rule-${index}`}>{rule}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {evidence.documents.length > 0 && (
+                <div className="plan-evidence-group">
+                  <div className="plan-evidence-title">
+                    资料原文片段（{evidence.documents.length}）
+                  </div>
+                  {evidence.documents.map((hit, index) => (
+                    <div key={`doc-${index}`} className="plan-evidence-item">
+                      <span className="plan-evidence-name">{hit.file_name}</span>
+                      <span className="plan-evidence-text">{hit.excerpt}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {evidence.graph_paths.length > 0 && (
+                <div className="plan-evidence-group">
+                  <div className="plan-evidence-title">
+                    图谱学习路径（{evidence.graph_paths.length}）
+                  </div>
+                  <ul className="plan-evidence-list">
+                    {evidence.graph_paths.map((line, index) => (
+                      <li key={`graph-${index}`}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {evidence.others.length > 0 && (
+                <div className="plan-evidence-group">
+                  <div className="plan-evidence-title">其他参考</div>
+                  <ul className="plan-evidence-list">
+                    {evidence.others.map((item, index) => (
+                      <li key={`other-${index}`}>
+                        {EVIDENCE_SOURCE_LABELS[item.source] ?? item.source}：{item.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

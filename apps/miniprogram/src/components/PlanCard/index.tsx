@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { View, Text } from '@tarojs/components'
+import { View, Text, Button } from '@tarojs/components'
 import {
+  build_plan_evidence,
   collect_document_hits,
   group_tasks_by_subject,
   summarize_context_sources,
-  type StudyDayPlan
+  type StudyDayPlan,
+  type StudyPlanRequest
 } from '../../vendor/core'
 import { taskTypeLabel } from '../../utils/labels'
 import { formatDuration } from '../../utils/format'
@@ -15,6 +17,16 @@ interface PlanCardProps {
   retrievedContext?: string[]
   message?: string
   changeSummary?: string
+  /** 归一化后的请求（透传，用于复述「这版是按什么约束排的」） */
+  request?: StudyPlanRequest | null
+  /** 计划生成时给出的理由（透传，来自落库的 reason） */
+  reason?: string
+}
+
+const EVIDENCE_SOURCE_LABELS: Record<string, string> = {
+  timetable: '课程表',
+  progress: '执行记录',
+  profile: '画像'
 }
 
 /** 计划卡片：按科目分组展示每天任务（一份周计划内区分多科目） */
@@ -22,9 +34,12 @@ export default function PlanCard({
   weeklyPlan,
   retrievedContext = [],
   message,
-  changeSummary
+  changeSummary,
+  request = null,
+  reason = ''
 }: PlanCardProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [showEvidence, setShowEvidence] = useState(false)
 
   if (!weeklyPlan.length) {
     return null
@@ -49,6 +64,14 @@ export default function PlanCard({
     ...new Set(collect_document_hits(retrievedContext).map((hit) => hit.file_name))
   ]
 
+  // G4.3：把「已经存在的证据」摊开——资料原文片段 / 图谱路径 / 命中的规则
+  const evidence = build_plan_evidence({ context: retrievedContext, weeklyPlan, request })
+  const hasEvidence =
+    evidence.documents.length > 0 ||
+    evidence.graph_paths.length > 0 ||
+    evidence.others.length > 0 ||
+    evidence.rules.length > 0
+
   return (
     <View className={styles.card}>
       <View className={styles.cardHeader} onClick={() => setCollapsed(!collapsed)}>
@@ -69,6 +92,72 @@ export default function PlanCard({
       {!!sourceSummary && <Text className={styles.sourceSummary}>本次参考：{sourceSummary}</Text>}
       {!!documentNames.length && (
         <Text className={styles.sourceEvidence}>依据：你的资料《{documentNames.join('》《')}》</Text>
+      )}
+
+      {hasEvidence && (
+        <View className={styles.evidence}>
+          <Button
+            className={styles.evidenceToggle}
+            size="mini"
+            onClick={() => setShowEvidence(!showEvidence)}
+          >
+            {showEvidence ? '收起依据' : 'AI 为什么这么安排'}
+          </Button>
+          {showEvidence && (
+            <View className={styles.evidenceBody}>
+              {!!reason && <Text className={styles.evidenceReason}>{reason}</Text>}
+
+              {evidence.rules.length > 0 && (
+                <View className={styles.evidenceGroup}>
+                  <Text className={styles.evidenceTitle}>命中的规则（{evidence.rules.length}）</Text>
+                  {evidence.rules.map((rule, index) => (
+                    <Text key={`rule-${index}`} className={styles.evidenceBullet}>
+                      · {rule}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {evidence.documents.length > 0 && (
+                <View className={styles.evidenceGroup}>
+                  <Text className={styles.evidenceTitle}>
+                    资料原文片段（{evidence.documents.length}）
+                  </Text>
+                  {evidence.documents.map((hit, index) => (
+                    <View key={`doc-${index}`} className={styles.evidenceItem}>
+                      <Text className={styles.evidenceName}>{hit.file_name}</Text>
+                      <Text className={styles.evidenceText}>{hit.excerpt}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {evidence.graph_paths.length > 0 && (
+                <View className={styles.evidenceGroup}>
+                  <Text className={styles.evidenceTitle}>
+                    图谱学习路径（{evidence.graph_paths.length}）
+                  </Text>
+                  {evidence.graph_paths.map((line, index) => (
+                    <Text key={`graph-${index}`} className={styles.evidenceBullet}>
+                      · {line}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {evidence.others.length > 0 && (
+                <View className={styles.evidenceGroup}>
+                  <Text className={styles.evidenceTitle}>其他参考</Text>
+                  {evidence.others.map((item, index) => (
+                    <Text key={`other-${index}`} className={styles.evidenceBullet}>
+                      · {EVIDENCE_SOURCE_LABELS[item.source] ?? item.source}：{item.text}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+        </View>
       )}
 
       {!collapsed &&
