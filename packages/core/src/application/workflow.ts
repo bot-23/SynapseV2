@@ -25,6 +25,7 @@ import {
   sanitize_subject_candidate,
 } from "../domain/multiSubject.js";
 import { apply_timetable_to_payload, build_timetable_context } from "../domain/timetable.js";
+import { assignment_countdown, looks_like_assignment } from "../domain/assignment.js";
 import {
   allocate_context_budget,
   collect_document_hits,
@@ -60,6 +61,7 @@ import type {
 import type { ProviderBundle } from "../providers/contracts.js";
 import type { RuntimeStore } from "../storage/runtimeStore.js";
 import { ALL_TOOLS, toOpenaiTools } from "./tools.js";
+import { AssignmentService } from "./assignmentService.js";
 import {
   buildConversationalReplyPrompt,
   buildIntentPrompt,
@@ -76,6 +78,12 @@ export interface PendingClarificationSession {
   request_echo: Record<string, unknown>;
   memories: FrontendMemory[];
   planning_mode: string;
+  /**
+   * v2：作业式计划的澄清会话。
+   * 非空表示这轮 pending 的是「作业没解析出来」，用户在澄清卡里补的信息
+   * 会拼回原文重新解析，而不是走学习计划的生成链路。
+   */
+  assignment_text?: string;
 }
 
 type LlmIntentResult = { function: string; params: Record<string, unknown> } & Record<
@@ -127,6 +135,15 @@ export class StudyPlanWorkflowService {
       short_goal: (text, limit) => this.rule_plan_service.short_goal(text, limit),
       duration: (daily, ratio) => this.rule_plan_service.duration(daily, ratio),
     });
+  }
+
+  /**
+   * v2：作业式计划服务。
+   * 每次取用时新建（服务本身无状态），这样 `providers` 被替换后（测试或运行中换 Key）
+   * 拿到的一定是当前生效的模型，不会抓着构造时的旧引用。
+   */
+  get assignment_service(): AssignmentService {
+    return new AssignmentService(this.runtime_store, this.providers.llm, this.clock, this.idGen);
   }
 
   async build_study_plan(
@@ -446,6 +463,19 @@ export class StudyPlanWorkflowService {
       });
     }
 
+    // v2 作业式计划：与「目标式计划」并列的第二条入口，整条链路独立，不影响下面任何一行。
+    if (intent === "assignment") {
+      const params = llmResult?.params ?? {};
+      const rawText = String(params["text"] ?? "").trim() || this._payload_input(payload);
+      return this._handle_assignment({
+        userId: normalizedPayload.user_id,
+        requestEcho,
+        memories,
+        text: rawText,
+        retrievedContext,
+      });
+    }
+
     if (intent !== "learning_request" && intent !== "restart") {
       let func = llmResult?.function ?? "";
       let params: Record<string, unknown> = llmResult?.params ?? {};
@@ -716,6 +746,22 @@ export class StudyPlanWorkflowService {
       });
     }
 
+    // v2 作业式计划：这轮 pending 的是「作业没解析出来」时，
+    // 把用户在澄清卡里补的信息拼回原文重新解析，而不是去生成学习计划。
+    if (session.assignment_text) {
+      const extra = payload.answers
+        .map((answer) => (answer.answer ?? "").trim())
+        .filter(Boolean)
+        .join("，");
+      return this._handle_assignment({
+        userId: session.normalized_payload.user_id,
+        requestEcho: session.request_echo,
+        memories: session.memories,
+        text: extra ? `${session.assignment_text}，${extra}` : session.assignment_text,
+        retrievedContext: [],
+      });
+    }
+
     const enrichedPayload = this._apply_clarification_answers(
       session.normalized_payload,
       payload.answers,
@@ -910,6 +956,7 @@ export class StudyPlanWorkflowService {
       request_echo: session.request_echo,
       memories: session.memories.map((memory) => ({ ...memory })),
       planning_mode: session.planning_mode,
+      ...(session.assignment_text ? { assignment_text: session.assignment_text } : {}),
     });
   }
 
@@ -928,6 +975,9 @@ export class StudyPlanWorkflowService {
       request_echo: (stored["request_echo"] as Record<string, unknown>) ?? {},
       memories: ((stored["memories"] as FrontendMemory[]) ?? []).map((item) => ({ ...item })),
       planning_mode: String(stored["planning_mode"] || "free"),
+      ...(stored["assignment_text"]
+        ? { assignment_text: String(stored["assignment_text"]) }
+        : {}),
     };
   }
 
@@ -1307,6 +1357,9 @@ export class StudyPlanWorkflowService {
       if (func === "tweak_plan") {
         return ["tweak", { function: func, params }];
       }
+      if (func === "submit_assignment") {
+        return ["assignment", { function: func, params }];
+      }
       if (["reply", "teach", "remember", "switch_subject", "ask"].includes(func)) {
         return ["chat", { function: func, params }];
       }
@@ -1321,6 +1374,13 @@ export class StudyPlanWorkflowService {
     }
     if (/^[?.？。!！….\d]+$/.test(text)) {
       return ["meaningless", null];
+    }
+
+    // v2 作业句式兜底：模型没给出工具调用（或压根没配 Key）时，靠规则把作业认出来，
+    // 否则「数学第三章习题1-20明天交」会被当成闲聊或学习目标。
+    // 只认强信号（截止词 + 作业词/数量），普通学习请求不受影响。
+    if (looks_like_assignment(message)) {
+      return ["assignment", null];
     }
 
     // 离线规划模式（未配置任何模型 Key）：没有模型能做意图分类，规则引擎却能排计划。
@@ -1386,6 +1446,9 @@ export class StudyPlanWorkflowService {
         force = "tweak_plan";
       } else if (["重来", "重新", "换一版", "再来一版"].some((t) => message.includes(t))) {
         force = "restart_plan";
+      } else if (looks_like_assignment(message)) {
+        // 作业句式放在最后：明确要计划/微调/重做的说法优先，避免抢走 create_plan。
+        force = "submit_assignment";
       }
       const result = await this.providers.llm.generateWithTools(
         prompt,
@@ -1718,6 +1781,124 @@ export class StudyPlanWorkflowService {
     }
     const budget = Math.max(0, 4 - evidenceReasons.length);
     return [...reasons.slice(0, budget), ...evidenceReasons].join("");
+  }
+
+  // ------------------------------------------------------------------
+  // 内部：作业式计划（v2）
+  // ------------------------------------------------------------------
+
+  /**
+   * 作业式计划主流程：解析原话 → 落库 → 按截止日排期 → 返回作业看板。
+   *
+   * 与目标式计划的区别：这里不生成学习目标，也不覆盖用户的短期计划，
+   * 只把「老师布置的事」变成一条条有截止日、可打卡、会催办的条目。
+   */
+  private async _handle_assignment(args: {
+    userId: string;
+    requestEcho: Record<string, unknown>;
+    memories: FrontendMemory[];
+    text: string;
+    retrievedContext: string[];
+  }): Promise<StudyPilotRunResponse> {
+    const result = await this.assignment_service.ingest({
+      userId: args.userId,
+      text: args.text,
+      context: args.retrievedContext,
+    });
+    const snapshot = result.snapshot;
+
+    // 一句都没解析出来、清单里也没有存量：走澄清链路追问，绝不静默丢弃。
+    if (!result.added && !snapshot.total) {
+      const clarification: ClarificationPrompt = {
+        sessionId: this.idGen.next(),
+        title: "这份作业我还差一点信息",
+        description: "我没能认出作业内容和截止时间，帮我补一句就行。",
+        questions: [
+          {
+            id: "q1",
+            label: "这份作业是什么、什么时候交？",
+            description: "例如：数学第三章习题1-20，明天交",
+            placeholder: "数学第三章习题1-20，明天交",
+            suggestedAnswers: ["明天交", "本周五交", "下周一交"],
+          },
+        ],
+      };
+      this._save_pending_session(clarification.sessionId, {
+        normalized_payload: this._request_from_user(args.userId),
+        request_echo: args.requestEcho,
+        memories: args.memories,
+        planning_mode: "free",
+        assignment_text: args.text,
+      });
+      return this._makeResponse({
+        status: "needs_clarification",
+        mode: "assignment-intake",
+        request: { ...args.requestEcho, intent: "assignment", assignmentText: args.text },
+        message: "这句我还没听出是作业 —— 补一句我就帮你排进日程、盯着截止日。",
+        followUp: "比如「数学第三章习题1-20，明天交」。",
+        reason: "作业式计划需要作业内容与截止时间两样信息，缺了就问，不猜。",
+        next_steps: ["补一句作业内容和截止时间，我立刻排进日程并开始盯截止。"],
+        clarification,
+        memory_used: args.memories,
+      });
+    }
+
+    const today = this.assignment_service.today();
+    const created = result.items;
+    const heads = created
+      .slice(0, 3)
+      .map((item) => {
+        const subject = item.subject ? `${item.subject}·` : "";
+        return `${subject}${item.title}（${assignment_countdown(item.due_date, today)}）`;
+      })
+      .join("；");
+    const firstDay = snapshot.schedule[0];
+    const sourceNote = result.extractor === "offline" ? "（本地规则解析，没占用模型）" : "";
+    const duplicateNote = !created.length ? "这条作业清单里已经有了，我没重复添加。" : "";
+    const missingNote = result.missing_due
+      ? `其中 ${result.missing_due} 条没听出截止时间，我先排在今天，你可以直接改。`
+      : "";
+    const planNote = firstDay
+      ? `今天先安排 ${firstDay.total_minutes} 分钟，共 ${firstDay.tasks.length} 项。`
+      : "";
+
+    return this._makeResponse({
+      mode: "assignment-intake",
+      request: { ...args.requestEcho, intent: "assignment", assignmentText: args.text },
+      message: duplicateNote
+        ? duplicateNote
+        : `收到，${created.length} 条作业已排进日程${sourceNote}：${heads}。${planNote}${missingNote}`,
+      followUp: planNote
+        ? "先按日程里的第一条开始做，截止日我会盯着。"
+        : "作业清单已就绪，先看「作业」页的排期。",
+      reason:
+        "作业式计划：按截止日倒排，把每条作业摊到截止前的每一天，" +
+        "并复用你的每日时长与课表避让；逾期未完成会在清单里标红。",
+      next_steps: [
+        `共 ${snapshot.total} 条作业，${snapshot.pending_count} 条待办、${snapshot.overdue_count} 条逾期。`,
+        "做完一项就打卡，系统会顺手把它排进复习队列。",
+        "逾期的可以一键重新排期，把剩余量摊到后面几天。",
+      ],
+      assignment: snapshot,
+      memory_used: args.memories,
+    });
+  }
+
+  /** 作业澄清会话需要挂在某个用户身上；作业路径不读学习目标，给个空壳即可。 */
+  private _request_from_user(userId: string): StudyPlanRequest {
+    const profile = this.runtime_store.get_profile(userId);
+    const minutes = Math.trunc(Number(profile["preferred_daily_minutes"] ?? 0));
+    return {
+      user_id: userId,
+      current_level: String(profile["current_level"] ?? ""),
+      learning_goal: "",
+      available_days_per_week: 5,
+      available_minutes_per_day: minutes > 0 ? minutes : 60,
+      deadline: null,
+      weak_points: [],
+      preferences: [],
+      need_user_confirmation: false,
+    };
   }
 
   // ------------------------------------------------------------------

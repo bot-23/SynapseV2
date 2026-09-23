@@ -213,6 +213,75 @@ export interface TodayPlan {
   updated_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// 作业式计划（v2 新增）
+//
+// 与「目标式计划」并列的第二种入口：老师布置的作业有明确截止日与数量，
+// 系统负责把它摊到截止前的每一天，并盯着打卡与逾期。
+// ---------------------------------------------------------------------------
+
+export type AssignmentStatus = "pending" | "done" | "overdue";
+
+/** 一条作业项（老师布置的一件事）。 */
+export interface AssignmentItem {
+  id: string;
+  subject: string;
+  title: string;
+  /** 数量，0 表示用户没说数量 */
+  quantity: number;
+  /** 数量单位：「题」「页」「单词」「张」…，空表示按整件事估时 */
+  unit: string;
+  /** 截止日期 YYYY-MM-DD */
+  due_date: string;
+  /** 预估总时长（分钟） */
+  estimated_minutes: number;
+  status: AssignmentStatus;
+  done_at: string;
+  created_at: string;
+  /** 用户原话，便于回看这条作业是怎么来的 */
+  source_text: string;
+  /** 完成后生成的复习卡 ID（复用资料→图谱→复习的同一条链路） */
+  review_card_ids: string[];
+  plan_id: string;
+  plan_version: number | null;
+  /** 逾期重排前的原始截止日；空表示没被重排过 */
+  original_due_date: string;
+  rescheduled_at: string;
+}
+
+/** 作业摊到某一天的一条安排。 */
+export interface AssignmentSlotTask {
+  assignment_id: string;
+  title: string;
+  subject: string;
+  quantity: number;
+  unit: string;
+  minutes: number;
+  due_date: string;
+}
+
+/** 作业在截止前某一天的安排。 */
+export interface AssignmentDaySlot {
+  date: string;
+  /** 从今天算起第几天，今天为 1 */
+  day_index: number;
+  /** 距截止的倒计时文案：「D-2」「今天截止」「已逾期 1 天」 */
+  countdown: string;
+  tasks: AssignmentSlotTask[];
+  total_minutes: number;
+}
+
+/** 作业看板快照（壳侧只读渲染，核心逻辑全在 core）。 */
+export interface AssignmentSnapshot {
+  items: AssignmentItem[];
+  schedule: AssignmentDaySlot[];
+  total: number;
+  pending_count: number;
+  done_count: number;
+  overdue_count: number;
+  generated_at: string;
+}
+
 /**
  * 复习项（v2 间隔重复）。
  *

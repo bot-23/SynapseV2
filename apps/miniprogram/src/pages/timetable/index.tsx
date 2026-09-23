@@ -13,8 +13,8 @@ import {
 } from '../../utils/format'
 import styles from './index.module.scss'
 
-const PASTE_EXAMPLE = `周一 高等数学 08:00-09:40
-周一 大学物理 10:00-11:40
+const PASTE_EXAMPLE = `周一 高等数学 第1-2节
+周二 大学物理 10:00-11:40 A101 张三老师
 周三 线性代数 14:00-15:40 1-16周`
 
 const emptyDraft = () => ({
@@ -129,7 +129,7 @@ export default function TimetablePage() {
       <View className={styles.card}>
         <Text className={styles.cardTitle}>从教务系统粘贴课表</Text>
         <Text className={styles.cardDesc}>
-          支持「周一 课程名 08:00-09:40」这类逐行文本，也支持先粘贴星期表头再粘贴课程行。解析后可以逐条校正。
+          支持「周一 课程名 第1-2节」或「周一 课程名 08:00-09:40」这类逐行文本，也支持先粘贴星期表头再粘贴课程行。节次会按默认作息表换算成时间；教室与「张三老师」这样的教师名会自动分列。解析后可以逐条校正。
         </Text>
         <Textarea
           className={styles.textarea}

@@ -13,6 +13,7 @@ import type {
 } from "../ports/index.js";
 import { systemClock, systemIdGen } from "../ports/index.js";
 import type {
+  AssignmentItem,
   BlockPlan,
   DayBusySummary,
   ReviewItem,
@@ -20,6 +21,7 @@ import type {
   StudyPlanRequest,
   TimetableEntry,
   TimetableParseResult,
+  TodayItem,
   TodayPlan,
 } from "../protocol/study.js";
 import {
@@ -42,6 +44,7 @@ import {
   review_key,
 } from "../domain/review.js";
 import { build_document_records } from "../domain/documentRetrieval.js";
+import { detect_document_subject } from "../domain/subjectInfer.js";
 import type {
   ApiResponse,
   FrontendAttachment,
@@ -62,10 +65,11 @@ import {
 } from "../providers/build.js";
 import { DeepSeekLlmProvider } from "../providers/deepseek.js";
 import { ConversationService } from "./conversations.js";
-import { extract_attachments, type IncomingFile } from "./fileExtract.js";
+import { extract_attachments, MAX_EXTRACTED_CHARS, type IncomingFile } from "./fileExtract.js";
 import { ProgressService } from "./progress.js";
 import { SettingsService } from "./settings.js";
 import { StudyPlanWorkflowService } from "./workflow.js";
+import { AssignmentService } from "./assignmentService.js";
 import { KgBuilder, type KgBuildResult } from "./kgBuilder.js";
 
 export interface SynapseCoreOptions {
@@ -393,6 +397,16 @@ export class SynapseCore {
       });
       if (additions.length) {
         this.store.save_reviews(userId, [...reviews, ...additions]);
+        // F1：把复习卡 ID 也回写到资料上 —— 资料 → 图谱 → 复习 三段证据都留痕。
+        const doc = this.store
+          .get_documents(userId)
+          .find((item) => String(item["doc_id"] ?? "") === docId);
+        const previous = Array.isArray(doc?.["review_card_ids"])
+          ? (doc!["review_card_ids"] as unknown[]).map((id) => String(id))
+          : [];
+        this.store.update_document(userId, docId, {
+          review_card_ids: [...previous, ...additions.map((item) => item.id)],
+        });
       }
       return apiOk(
         { ...result, added_reviews: additions.length },
@@ -914,31 +928,50 @@ export class SynapseCore {
   // ------------------------------------------------------------------
 
   /** 导入一份资料（粘贴文本）。切片与检索全在本地完成，不需要联网，也不需要额外服务。 */
-  importDocument(userId: string, name: string, text: string): ApiResponse<Record<string, unknown>> {
+  importDocument(
+    userId: string,
+    name: string,
+    text: string,
+    options: { source?: string; subject?: string } = {},
+  ): ApiResponse<Record<string, unknown>> {
     try {
       const uid = userId || "default";
-      const content = (text || "").trim();
+      // 与「选文件导入」用同一个上限，避免两条路径对同一份资料给出不同的索引长度。
+      const content = (text || "").trim().slice(0, MAX_EXTRACTED_CHARS);
       if (!content) {
         return apiFail("资料内容为空");
       }
+      const fileName = (name || "").trim() || "未命名资料";
       const records = build_document_records(uid, [
         {
           id: this.idGen.next(),
-          name: (name || "").trim() || "未命名资料",
+          name: fileName,
           extracted_text: content,
         },
       ]);
       if (!records.length) {
         return apiFail("没能从这段内容里切出可检索的片段");
       }
+      // F1：导入即补齐结构化元数据。科目用关键词表推断，离线可用；也允许调用方显式指定。
+      const subject = (options.subject ?? "").trim() || detect_document_subject(fileName, content);
+      const withMeta = records.map((record) => ({
+        ...record,
+        subject,
+        tags: [] as string[],
+        source: options.source === "paste" ? "paste" : "upload",
+        char_count: content.length,
+        kg_node_ids: [] as string[],
+        review_card_ids: [] as string[],
+      }));
       const saved = this.store.save_documents(
         uid,
-        records as unknown as Array<Record<string, unknown>>,
+        withMeta as unknown as Array<Record<string, unknown>>,
       );
       const first = records[0]!;
+      const subjectNote = subject ? `，科目识别为「${subject}」` : "";
       return apiOk(
         { documents: saved },
-        `已导入「${first.file_name}」，切出 ${first.chunks.length} 段`,
+        `已导入「${first.file_name}」，切出 ${first.chunks.length} 段${subjectNote}`,
       );
     } catch (error) {
       return apiFail(`导入失败：${error instanceof Error ? error.message : String(error)}`);
@@ -952,10 +985,105 @@ export class SynapseCore {
         file_name: String(doc["file_name"] ?? "未命名资料"),
         excerpt: String(doc["excerpt"] ?? ""),
         chunk_count: Array.isArray(doc["chunks"]) ? (doc["chunks"] as unknown[]).length : 0,
+        // F1 元数据
+        subject: String(doc["subject"] ?? ""),
+        tags: (doc["tags"] ?? []) as string[],
+        source: String(doc["source"] ?? "upload"),
+        char_count: Number(doc["char_count"] ?? 0),
+        kg_node_count: Array.isArray(doc["kg_node_ids"])
+          ? (doc["kg_node_ids"] as unknown[]).length
+          : 0,
+        review_card_count: Array.isArray(doc["review_card_ids"])
+          ? (doc["review_card_ids"] as unknown[]).length
+          : 0,
       }));
       return apiOk({ documents, total: documents.length });
     } catch (error) {
       return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** F1.3：修改资料的标题 / 科目 / 标签（识别错了要能纠正）。 */
+  updateDocument(
+    userId: string,
+    docId: string,
+    patch: { file_name?: string; subject?: string; tags?: string[] },
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const documents = this.store.update_document(uid, docId, patch);
+      const updated = documents.find((doc) => String(doc["doc_id"] ?? "") === docId);
+      if (!updated) {
+        return apiFail("资料不存在或已被删除");
+      }
+      return apiOk({ document: updated }, "资料已更新");
+    } catch (error) {
+      return apiFail(`更新失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * F1.4 / F2.3：抽卡 —— 把某份资料已经生成的图谱知识点转成复习卡，并回写卡片 ID。
+   *
+   * 幂等：已在复习队列里的知识点不会重复入队（按 科目::知识点 判重）。
+   * 需要先构建图谱，否则没有知识点可抽。
+   */
+  generateReviewCardsFromDocument(
+    userId: string,
+    docId: string,
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const doc = this.store.get_documents(uid).find((item) => String(item["doc_id"] ?? "") === docId);
+      if (!doc) {
+        return apiFail("资料不存在或已被删除");
+      }
+      const nodeIds = Array.isArray(doc["kg_node_ids"])
+        ? (doc["kg_node_ids"] as unknown[]).map((id) => String(id))
+        : [];
+      if (!nodeIds.length) {
+        return apiFail("这份资料还没有图谱知识点，请先构建图谱");
+      }
+      const nodeById = new Map(this.store.kgNodes().map((node) => [node.id, node]));
+      const reviews = this.store.get_reviews(uid);
+      const knownKeys = new Set(reviews.map((item) => item.key));
+      const today = to_date(this.clock.nowIso());
+      const created: ReviewItem[] = [];
+      for (const nodeId of nodeIds) {
+        const node = nodeById.get(nodeId);
+        if (!node || node.category === "document") {
+          continue;
+        }
+        const key = review_key(node.subject, node.name);
+        if (knownKeys.has(key)) {
+          continue;
+        }
+        knownKeys.add(key);
+        created.push(
+          create_review_item({
+            id: this.idGen.next(),
+            subject: node.subject,
+            topic: node.name,
+            today,
+          }),
+        );
+      }
+      if (created.length) {
+        this.store.save_reviews(uid, [...reviews, ...created]);
+      }
+      const previous = Array.isArray(doc["review_card_ids"])
+        ? (doc["review_card_ids"] as unknown[]).map((id) => String(id))
+        : [];
+      const allCardIds = [...new Set([...previous, ...created.map((item) => item.id)])];
+      this.store.update_document(uid, docId, { review_card_ids: allCardIds });
+      return apiOk(
+        { created: created.length, review_card_ids: allCardIds, documents: this.store.get_documents(uid) },
+        created.length
+          ? `已生成 ${created.length} 张复习卡，明天开始复习`
+          : "复习卡已是最新",
+      );
+    } catch (error) {
+      return apiFail(`抽卡失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -1083,6 +1211,72 @@ export class SynapseCore {
       }
 
       const graphResult = await this.buildKgFromDocument("demo-math-notes", uid);
+
+      // 演示数据 v2：作业式计划样例（2 条待办 + 1 条逾期），让「我必须交」这条链路一进来就能演示。
+      const demoAssignments: AssignmentItem[] = [
+        {
+          id: `demo-assignment-math`,
+          subject: "数学",
+          title: "第三章习题",
+          quantity: 20,
+          unit: "题",
+          due_date: add_days(today, 1),
+          estimated_minutes: 60,
+          status: "pending",
+          done_at: "",
+          created_at: today,
+          source_text: "数学第三章习题1-20，明天交",
+          review_card_ids: [],
+          plan_id: "",
+          plan_version: planMeta.version,
+          original_due_date: "",
+          rescheduled_at: "",
+        },
+        {
+          id: `demo-assignment-english`,
+          subject: "英语",
+          title: "背 Unit3 单词",
+          quantity: 0,
+          unit: "",
+          due_date: add_days(today, 3),
+          estimated_minutes: 30,
+          status: "pending",
+          done_at: "",
+          created_at: today,
+          source_text: "英语背Unit3单词，三天后默写",
+          review_card_ids: [],
+          plan_id: "",
+          plan_version: planMeta.version,
+          original_due_date: "",
+          rescheduled_at: "",
+        },
+        {
+          id: `demo-assignment-physics`,
+          subject: "物理",
+          title: "第五章卷子一张",
+          quantity: 1,
+          unit: "张",
+          due_date: add_days(today, -1),
+          estimated_minutes: 45,
+          status: "overdue",
+          done_at: "",
+          created_at: add_days(today, -3),
+          source_text: "物理第五章卷子一张，昨天交",
+          review_card_ids: [],
+          plan_id: "",
+          plan_version: planMeta.version,
+          original_due_date: "",
+          rescheduled_at: "",
+        },
+      ];
+      const storedAssignments = this.store.get_assignments(uid);
+      const knownAssignments = new Set(storedAssignments.map((item) => item.id));
+      const newAssignments = demoAssignments.filter((item) => !knownAssignments.has(item.id));
+      if (newAssignments.length) {
+        this.store.save_assignments(uid, [...storedAssignments, ...newAssignments]);
+      }
+      const assignmentSnapshot = this.workflow.assignment_service.snapshot(uid);
+
       return apiOk(
         {
           document_count: this.store.get_documents(uid).length,
@@ -1090,8 +1284,10 @@ export class SynapseCore {
           completed_tasks: 2,
           due_reviews: dueItems.length,
           graph: graphResult.data,
+          assignment_count: assignmentSnapshot.total,
+          overdue_assignments: assignmentSnapshot.overdue_count,
         },
-        "演示数据已载入：资料、计划、打卡、复习队列与知识图谱均已就绪",
+        "演示数据已载入：资料、计划、打卡、复习队列、知识图谱与作业清单均已就绪",
       );
     } catch (error) {
       return apiFail(`载入失败：${error instanceof Error ? error.message : String(error)}`);
@@ -1140,6 +1336,219 @@ export class SynapseCore {
       preferences: [],
       need_user_confirmation: false,
     };
+  }
+
+  // ------------------------------------------------------------------
+  // 作业式计划（v2：老师布置的任务 → 排进日程 → 盯着截止）
+  // ------------------------------------------------------------------
+
+  private get assignments(): AssignmentService {
+    return this.workflow.assignment_service;
+  }
+
+  /** 作业看板：清单 + 已按截止日摊好的日程（壳侧只读渲染）。 */
+  listAssignments(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const snapshot = this.assignments.snapshot(userId || "default");
+      const data = {
+        ...snapshot,
+        items: [...snapshot.items],
+        schedule: [...snapshot.schedule],
+      };
+      return apiOk(
+        data as unknown as Record<string, unknown>,
+        snapshot.total ? `共 ${snapshot.total} 条作业` : "还没有作业",
+      );
+    } catch (error) {
+      return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 直接把一段作业原话排进日程（不走对话意图门，供「作业」页快速添加与演示数据使用）。 */
+  async createAssignments(
+    userId: string,
+    text: string,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    try {
+      const result = await this.assignments.ingest({ userId: userId || "default", text });
+      return apiOk(
+        {
+          ...result.snapshot,
+          extractor: result.extractor,
+          unparsed: result.unparsed,
+          added: result.added,
+        } as unknown as Record<string, unknown>,
+        result.added ? `已排进 ${result.added} 条作业` : "没能从这句话里认出作业",
+      );
+    } catch (error) {
+      return apiFail(`排期失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 作业打卡：完成时顺手推进复习队列，并把卡片 ID 回写到这条作业上。 */
+  completeAssignment(
+    userId: string,
+    assignmentId: string,
+    done = true,
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const result = this.assignments.complete(userId || "default", assignmentId, done);
+      if (!result.item) {
+        return apiFail("没有找到这条作业");
+      }
+      return apiOk(
+        {
+          ...result.snapshot,
+          item: result.item,
+          review_added: result.review_added,
+        } as unknown as Record<string, unknown>,
+        done ? "已标记完成" : "已取消完成",
+      );
+    } catch (error) {
+      return apiFail(`更新失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 逾期重排：把逾期作业的剩余量摊到从今天起的后续几天。 */
+  rescheduleOverdueAssignments(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const result = this.assignments.reschedule(userId || "default");
+      return apiOk(
+        result.snapshot as unknown as Record<string, unknown>,
+        result.moved ? `已把 ${result.moved} 条逾期作业重新排到后续几天` : "没有需要重新排期的作业",
+      );
+    } catch (error) {
+      return apiFail(`重排失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 学习仪表盘 / 数据导出（v2：数据闭环与数据主权）
+  // ------------------------------------------------------------------
+
+  /** 仪表盘：今日完成率、本周打卡天数、逾期作业、能力值 —— 全是现成数据的纯展示。 */
+  getDashboard(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const today = to_date(this.clock.nowIso());
+
+      const todayPlan = this.getTodayPlan(uid);
+      const todayRecord = ((todayPlan.data ?? {})["today"] ?? {}) as Record<string, unknown>;
+      const todayItems = (todayRecord["items"] ?? []) as TodayItem[];
+      const todayDone = todayItems.filter((item) => item.done).length;
+
+      // 最近 7 天的打卡：进度记录只在勾选时写入，updated_at 的日期就是打卡日
+      const progress = this.store.get_progress(uid);
+      const dayCounts = new Map<string, number>();
+      for (const record of Object.values(progress)) {
+        if (!record.done) {
+          continue;
+        }
+        const day = to_date(String(record.updated_at ?? ""));
+        if (!day) {
+          continue;
+        }
+        dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
+      }
+      const week: Array<{ date: string; done_count: number }> = [];
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const date = add_days(today, -offset);
+        week.push({ date, done_count: dayCounts.get(date) ?? 0 });
+      }
+
+      const profile = this.store.get_profile(uid);
+      const subjects = this._ability_rows(profile["abilities_json"]);
+
+      const assignmentSnapshot = this.assignments.snapshot(uid);
+      const reviews = this.store.get_reviews(uid);
+      const dueReviews = due_review_items(reviews, today);
+      const savedPlan = this.store.get_plan(uid);
+
+      return apiOk({
+        today: {
+          date: today,
+          total: todayItems.length,
+          done_count: todayDone,
+          rate: todayItems.length ? Math.round((todayDone / todayItems.length) * 100) : 0,
+        },
+        week: {
+          days: week,
+          active_days: week.filter((day) => day.done_count > 0).length,
+          done_count: week.reduce((sum, day) => sum + day.done_count, 0),
+        },
+        assignments: {
+          total: assignmentSnapshot.total,
+          pending: assignmentSnapshot.pending_count,
+          done: assignmentSnapshot.done_count,
+          overdue: assignmentSnapshot.overdue_count,
+        },
+        reviews: { total: reviews.length, due_count: dueReviews.length },
+        documents: this.store.get_documents(uid).length,
+        subjects,
+        plan: savedPlan
+          ? { version: savedPlan.version, updated_at: savedPlan.updated_at }
+          : { version: 0, updated_at: "" },
+      });
+    } catch (error) {
+      return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 导出全部本地数据为 JSON（壳侧负责落成文件）。API Key 不在导出内容里。 */
+  exportData(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const data = this.store.export_user_data(uid);
+      const conversationCount = this.store.list_conversations(uid).length;
+      return apiOk(
+        {
+          data,
+          filename: `synapse-export-${to_date(this.clock.nowIso())}.json`,
+          counts: {
+            documents: this.store.get_documents(uid).length,
+            assignments: this.store.get_assignments(uid).length,
+            reviews: this.store.get_reviews(uid).length,
+            conversations: conversationCount,
+            kg_nodes: this.store.kgNodes().length,
+            kg_edges: this.store.kgEdges().length,
+          },
+        },
+        "数据已导出",
+      );
+    } catch (error) {
+      return apiFail(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 把 abilities_json 解析成可展示的能力行（解析失败就当没有，不抛异常）。 */
+  private _ability_rows(raw: unknown): Array<{
+    name: string;
+    level: number;
+    skill_score: number;
+  }> {
+    let parsed: Record<string, unknown> = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      parsed = raw as Record<string, unknown>;
+    } else if (typeof raw === "string" && raw.trim() && raw.trim() !== "{}") {
+      try {
+        const value = JSON.parse(raw);
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          parsed = value as Record<string, unknown>;
+        }
+      } catch {
+        parsed = {};
+      }
+    }
+    return Object.entries(parsed)
+      .map(([name, value]) => {
+        const row = (value ?? {}) as Record<string, unknown>;
+        return {
+          name,
+          level: Math.trunc(Number(row["level"] ?? 1)),
+          skill_score: Number(row["skill_score"] ?? 1),
+        };
+      })
+      .sort((a, b) => b.skill_score - a.skill_score);
   }
 
   // ------------------------------------------------------------------

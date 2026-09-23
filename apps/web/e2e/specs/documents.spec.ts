@@ -53,4 +53,43 @@ test.describe('资料库', () => {
       timeout: 15_000,
     })
   })
+
+  test('从本机文件导入 Markdown', async ({ page }) => {
+    await onboard(page)
+    await page.locator('.nav-item', { hasText: '资料库' }).click()
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-md-'))
+    const filePath = path.join(dir, '高数笔记.md')
+    fs.writeFileSync(
+      filePath,
+      ['# 函数与导数', '', '## 单调性', '', '含参函数先求导，再按参数分类讨论。'].join('\n'),
+      'utf-8',
+    )
+
+    await page.setInputFiles('input.file-input', filePath)
+    await expect(page.locator('.doc-name').first()).toHaveText('高数笔记.md', { timeout: 15_000 })
+    await expect(page.locator('.mine-card', { hasText: '已导入' })).toContainText('已导入（1）')
+  })
+
+  test('批量上传 3 个 txt：2 个成功、1 个超限并明确提示', async ({ page }) => {
+    await onboard(page)
+    await page.locator('.nav-item', { hasText: '资料库' }).click()
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-batch-'))
+    const first = path.join(dir, '数学笔记.txt')
+    const second = path.join(dir, '英语词汇.txt')
+    const tooBig = path.join(dir, '超大文件.txt')
+    fs.writeFileSync(first, '导数：含参函数单调性讨论要先求导，再按参数分类。', 'utf-8')
+    fs.writeFileSync(second, '词汇：abandon 放弃；ability 能力。', 'utf-8')
+    fs.writeFileSync(tooBig, 'x'.repeat(2 * 1024 * 1024 + 16), 'utf-8')
+
+    await page.setInputFiles('input.file-input', [first, second, tooBig])
+
+    // 单个失败不阻塞其他文件：2 成功 + 1 超限，且超限文案明确
+    const snackbar = page.locator('.notice.snackbar')
+    await expect(snackbar).toContainText('成功 2 个', { timeout: 15_000 })
+    await expect(snackbar).toContainText('失败 1 个')
+    await expect(snackbar).toContainText('超过 2MB')
+    await expect(page.locator('.mine-card', { hasText: '已导入' })).toContainText('已导入（2）')
+  })
 })

@@ -115,6 +115,14 @@ export const askTool = spec(
   ["question"],
 );
 
+export const submitAssignmentTool = spec(
+  "submit_assignment",
+  "用户把老师布置的作业/习题清单交给你，需要排进日程并盯着截止时间。当用户说「明天交」「周五前」「习题1-20」这类作业句式时调用。\n\n    Args:\n        text: 用户描述的作业原文",
+  "SubmitAssignmentInput",
+  { text: stringField("作业原文，如'数学第三章习题1-20明天交'", "Text") },
+  ["text"],
+);
+
 export const ALL_TOOLS: ToolSpec[] = [
   replyTool,
   createPlanTool,
@@ -124,6 +132,7 @@ export const ALL_TOOLS: ToolSpec[] = [
   teachTool,
   switchSubjectTool,
   askTool,
+  submitAssignmentTool,
 ];
 
 /** 转成 OpenAI function-calling 工具格式（DeepSeek 兼容）。 */

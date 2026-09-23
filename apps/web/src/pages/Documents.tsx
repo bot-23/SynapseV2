@@ -6,6 +6,12 @@ interface DocumentView {
   file_name: string
   excerpt: string
   chunk_count: number
+  subject: string
+  tags: string[]
+  source: string
+  char_count: number
+  kg_node_count: number
+  review_card_count: number
 }
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024
@@ -16,6 +22,11 @@ export default function DocumentsView() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [buildingDocId, setBuildingDocId] = useState('')
+  const [learningDocId, setLearningDocId] = useState('')
+  const [editingId, setEditingId] = useState('')
+  const [draftName, setDraftName] = useState('')
+  const [draftSubject, setDraftSubject] = useState('')
+  const [draftTags, setDraftTags] = useState('')
   const [notice, setNotice] = useState('')
 
   const flash = (message: string) => {
@@ -42,7 +53,10 @@ export default function DocumentsView() {
     }
     setBusy(true)
     try {
-      const result = getCore().importDocument(DEFAULT_USER_ID, name.trim(), content)
+      // F2.2：粘贴进来自动标记来源，便于区分「上传」与「粘贴」
+      const result = getCore().importDocument(DEFAULT_USER_ID, name.trim(), content, {
+        source: 'paste',
+      })
       console.log('[Synapse] 导入资料', result.success, result.message)
       flash(result.message)
       if (result.success) {
@@ -55,44 +69,54 @@ export default function DocumentsView() {
     }
   }
 
-  const pickFile = async (file?: File | null) => {
-    if (busy || !file) {
-      return
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      flash('文件请控制在 2MB 以内')
+  /** F2.1：批量上传 —— 逐个复用单文件链路，单个失败不阻塞其他文件。 */
+  const pickFiles = async (files: FileList | null) => {
+    if (busy || !files || !files.length) {
       return
     }
     setBusy(true)
+    const succeeded: string[] = []
+    const failed: string[] = []
     try {
-      const content = await file.text()
-      const attachments = await getCore().extractFiles([
-        {
-          name: file.name,
-          contentType: file.type || 'text/plain',
-          data: new TextEncoder().encode(content),
-        },
-      ])
-      const attachment = attachments[0]
-      if (!attachment || attachment.extraction_status !== 'done' || !attachment.extracted_text) {
-        flash(attachment?.extraction_error || '这个文件没有提取到文本')
-        return
+      for (const file of Array.from(files)) {
+        if (file.size > MAX_FILE_SIZE) {
+          failed.push(`${file.name}（超过 2MB，请压缩或拆分后再传）`)
+          continue
+        }
+        try {
+          const content = await file.text()
+          const attachments = await getCore().extractFiles([
+            {
+              name: file.name,
+              contentType: file.type || 'text/plain',
+              data: new TextEncoder().encode(content),
+            },
+          ])
+          const attachment = attachments[0]
+          if (!attachment || attachment.extraction_status !== 'done' || !attachment.extracted_text) {
+            failed.push(`${file.name}（${attachment?.extraction_error || '没有提取到文本'}）`)
+            continue
+          }
+          const result = getCore().importDocument(DEFAULT_USER_ID, file.name, attachment.extracted_text)
+          console.log('[Synapse] 导入资料', file.name, result.success, result.message)
+          if (result.success) {
+            succeeded.push(file.name)
+          } else {
+            failed.push(`${file.name}（${result.message}）`)
+          }
+        } catch (error) {
+          console.log('[Synapse] 读取文件失败', file.name, error)
+          failed.push(`${file.name}（读取失败）`)
+        }
       }
-      const result = getCore().importDocument(
-        DEFAULT_USER_ID,
-        file.name || name.trim(),
-        attachment.extracted_text,
-      )
-      console.log('[Synapse] 导入资料', result.success, result.message)
-      flash(result.message)
-      if (result.success) {
-        setName('')
-        setText('')
-        load()
+      const summary = [`成功 ${succeeded.length} 个`]
+      if (failed.length) {
+        summary.push(`失败 ${failed.length} 个：${failed.join('；')}`)
       }
-    } catch (error) {
-      console.log('[Synapse] 选择文件结束', error)
-      flash('读取文件失败，请重试')
+      flash(summary.join('，'))
+      setName('')
+      setText('')
+      load()
     } finally {
       setBusy(false)
     }
@@ -119,7 +143,53 @@ export default function DocumentsView() {
       flash(result.message)
     } finally {
       setBuildingDocId('')
+      load()
     }
+  }
+
+  /** F2.3：一键学习化 —— 串起「构建图谱 → 生成复习卡」，各自失败独立提示。 */
+  const oneClickLearn = async (doc: DocumentView) => {
+    if (learningDocId) {
+      return
+    }
+    setLearningDocId(doc.doc_id)
+    try {
+      const built = await getCore().buildKgFromDocument(doc.doc_id, DEFAULT_USER_ID)
+      if (!built.success) {
+        flash(built.message)
+        return
+      }
+      const cards = getCore().generateReviewCardsFromDocument(DEFAULT_USER_ID, doc.doc_id)
+      console.log('[Synapse] 一键学习化', built.success, cards.success)
+      flash(`${built.message}；${cards.message}`)
+    } finally {
+      setLearningDocId('')
+      load()
+    }
+  }
+
+  /** F1.3：改标题 / 科目 / 标签。 */
+  const startEdit = (doc: DocumentView) => {
+    setEditingId(doc.doc_id)
+    setDraftName(doc.file_name)
+    setDraftSubject(doc.subject)
+    setDraftTags((doc.tags ?? []).join('、'))
+  }
+
+  const saveEdit = (doc: DocumentView) => {
+    const tags = draftTags
+      .split(/[、,，\s]+/)
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+    const result = getCore().updateDocument(DEFAULT_USER_ID, doc.doc_id, {
+      file_name: draftName.trim(),
+      subject: draftSubject.trim(),
+      tags,
+    })
+    console.log('[Synapse] 更新资料', doc.doc_id, result.success)
+    flash(result.message)
+    setEditingId('')
+    load()
   }
 
   return (
@@ -135,10 +205,11 @@ export default function DocumentsView() {
         <label className="file-upload">
           <input
             type="file"
-            accept=".txt,text/plain"
+            multiple
+            accept=".txt,.md,.markdown,.mdx,text/plain,text/markdown"
             className="file-input"
             onChange={(event) => {
-              pickFile(event.target.files?.[0])
+              pickFiles(event.target.files)
               event.target.value = ''
             }}
           />
@@ -146,7 +217,7 @@ export default function DocumentsView() {
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            从本机选择 .txt 文件
+            从本机选择文本文件（.txt / .md，可多选）
           </span>
         </label>
 
@@ -183,11 +254,39 @@ export default function DocumentsView() {
         {documents.map((doc) => (
           <div key={doc.doc_id} className="doc-row">
             <div className="doc-info">
-              <div className="doc-name">{doc.file_name}</div>
-              <div className="doc-meta">{doc.chunk_count} 个片段</div>
+              <div className="doc-title-row">
+                <span className="doc-name">{doc.file_name}</span>
+                {!!doc.subject && <span className="doc-subject">{doc.subject}</span>}
+                {doc.source === 'paste' && <span className="doc-source">粘贴</span>}
+              </div>
+              <div className="doc-meta">
+                {doc.chunk_count} 个片段
+                {Number(doc.char_count) > 0 ? ` · ${doc.char_count} 字` : ''}
+                {Number(doc.kg_node_count) > 0 ? ` · ${doc.kg_node_count} 个知识点` : ''}
+                {Number(doc.review_card_count) > 0
+                  ? ` · ${doc.review_card_count} 张复习卡`
+                  : ''}
+              </div>
+              {!!(doc.tags ?? []).length && (
+                <div className="doc-tags">
+                  {(doc.tags ?? []).map((tag) => (
+                    <span key={tag} className="doc-tag">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
               {!!doc.excerpt && <div className="doc-excerpt">{doc.excerpt}</div>}
             </div>
             <div className="doc-actions">
+              <button
+                type="button"
+                className="doc-build"
+                disabled={Boolean(learningDocId)}
+                onClick={() => oneClickLearn(doc)}
+              >
+                {learningDocId === doc.doc_id ? '学习中…' : '一键学习化'}
+              </button>
               <button
                 type="button"
                 className="doc-build"
@@ -196,10 +295,47 @@ export default function DocumentsView() {
               >
                 {buildingDocId === doc.doc_id ? '构建中…' : '构建图谱'}
               </button>
+              <button type="button" className="doc-edit" onClick={() => startEdit(doc)}>
+                编辑
+              </button>
               <button type="button" className="doc-remove" onClick={() => removeDoc(doc)}>
                 删除
               </button>
             </div>
+            {editingId === doc.doc_id && (
+              <div className="doc-editor">
+                <input
+                  className="mine-input"
+                  placeholder="资料名"
+                  value={draftName}
+                  onChange={(event) => setDraftName(event.target.value)}
+                />
+                <input
+                  className="mine-input"
+                  placeholder="科目，如 高等数学"
+                  value={draftSubject}
+                  onChange={(event) => setDraftSubject(event.target.value)}
+                />
+                <input
+                  className="mine-input"
+                  placeholder="标签，用、分隔（可空）"
+                  value={draftTags}
+                  onChange={(event) => setDraftTags(event.target.value)}
+                />
+                <div className="doc-editor-actions">
+                  <button type="button" className="primary-button" onClick={() => saveEdit(doc)}>
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setEditingId('')}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

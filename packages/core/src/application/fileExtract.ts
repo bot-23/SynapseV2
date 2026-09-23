@@ -13,6 +13,18 @@ export interface IncomingFile {
   data: Uint8Array;
 }
 
+/**
+ * 单份资料最多索引的字符数。
+ *
+ * 旧实现把提取结果硬截断到 6000 字，导致「选文件导入」会在无提示的情况下丢掉
+ * 6000 字之后的全部内容（而粘贴导入不截断，两条路径行为不一致）。
+ * 这里统一抬高到 20 万字：远大于常见的笔记/讲义，同时仍给 KV 留出体积上限。
+ */
+export const MAX_EXTRACTED_CHARS = 200_000;
+
+/** 纯文本类后缀：内容即文本，走 core 内置解码，不需要壳注入解析器。 */
+const PLAIN_TEXT_SUFFIXES = new Set(["txt", "text", "md", "markdown", "mdx"]);
+
 function decodeText(raw: Uint8Array): string {
   // Python: utf-8 / utf-8-sig / gbk / gb2312 依次尝试，最终 utf-8 ignore。
   // utf-8-sig 在 utf-8 失败时也必然失败（同编解码、仅多去 BOM），故实际链为 utf-8 → gbk → gb2312。
@@ -48,7 +60,7 @@ export async function extract_attachments(
     let extractionError = "";
 
     try {
-      if (suffix === "txt") {
+      if (PLAIN_TEXT_SUFFIXES.has(suffix)) {
         extractedText = decodeText(raw);
         extractionStatus = "done";
       } else if (suffix === "pdf") {
@@ -58,7 +70,7 @@ export async function extract_attachments(
         extractedText = await pdfExtractor.extract(fileName, raw);
         extractionStatus = "done";
       } else {
-        extractionError = "当前仅支持提取 txt/pdf 文本。";
+        extractionError = "当前仅支持提取 txt / md / pdf 文本。";
       }
     } catch (error) {
       extractionStatus = "error";
@@ -72,7 +84,7 @@ export async function extract_attachments(
       name: upload.name || "未命名资料",
       size: raw.length,
       type: upload.contentType || suffix || "unknown",
-      extracted_text: cleanedText.slice(0, 6000),
+      extracted_text: cleanedText.slice(0, MAX_EXTRACTED_CHARS),
       text_excerpt: excerpt,
       extraction_status: extractionStatus,
       extraction_error: extractionError,

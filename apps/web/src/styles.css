@@ -1546,6 +1546,7 @@ svg {
 
 .doc-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -1617,6 +1618,89 @@ svg {
 .doc-build:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+/* F1：资料元数据与编辑 */
+.doc-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-subject {
+  padding: 1px 8px;
+  color: var(--brand);
+  font-size: 10.5px;
+  font-weight: 650;
+  background: var(--brand-light);
+  border-radius: var(--radius-full);
+}
+
+.doc-source {
+  margin-left: 6px;
+  padding: 1px 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-full);
+}
+
+.doc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.doc-tag {
+  padding: 1px 8px;
+  color: var(--text-soft);
+  font-size: 10.5px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-full);
+}
+
+.doc-edit {
+  padding: 6px 12px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 650;
+  background: var(--warm-gray);
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.doc-edit:hover {
+  background: var(--warm-border);
+}
+
+.doc-editor {
+  flex: 0 0 100%;
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-md);
+}
+
+.doc-editor .mine-input {
+  margin-top: 0;
+  margin-bottom: 8px;
+  background: var(--card-bg);
+}
+
+.doc-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.doc-editor-actions .primary-button,
+.doc-editor-actions .secondary-button {
+  width: auto;
+  height: 36px;
+  margin-top: 0;
+  padding: 0 16px;
 }
 
 .graph-entry {
@@ -2403,6 +2487,214 @@ svg {
    RESPONSIVE
    ============================================================ */
 
+/* ---- 学习仪表盘（F4） ---- */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dashboard-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-md);
+}
+
+.dashboard-value {
+  color: var(--brand);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.dashboard-label {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.dashboard-abilities {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ability-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ability-name {
+  flex: 0 0 84px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ability-track {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  background: var(--warm-gray);
+  border-radius: var(--radius-full);
+}
+
+.ability-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-light) 100%);
+  border-radius: var(--radius-full);
+}
+
+.ability-level {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* ---- 作业式计划（F3） ---- */
+.assignment-hint {
+  padding: 10px 14px;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  background: var(--brand-light);
+  border-radius: var(--radius-md);
+}
+
+.assignment-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assignment-group {
+  margin-top: 12px;
+}
+
+.assignment-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.assignment-date {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 660;
+}
+
+.assignment-countdown {
+  padding: 1px 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-full);
+}
+
+.assignment-countdown.urgent {
+  color: #dc2626;
+  font-weight: 650;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.assignment-minutes {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.assignment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--warm-border);
+}
+
+.assignment-row:last-child {
+  border-bottom: none;
+}
+
+.assignment-row.overdue {
+  background: rgba(220, 38, 38, 0.04);
+  border-radius: var(--radius-sm);
+}
+
+.assignment-row.done {
+  opacity: 0.55;
+}
+
+.assignment-row.done .assignment-name {
+  text-decoration: line-through;
+}
+
+.assignment-toggle {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.assignment-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.assignment-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.assignment-amount {
+  padding: 1px 7px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  background: var(--warm-gray);
+  border-radius: var(--radius-full);
+}
+
+.assignment-day {
+  margin-top: 12px;
+}
+
+.assignment-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-bottom: 1px dashed var(--warm-border);
+}
+
+.assignment-slot:last-child {
+  border-bottom: none;
+}
+
+.assignment-slot-minutes {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2434,7 +2726,7 @@ svg {
   .nav-items {
     display: grid;
     height: 48px;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 2px;
     margin: 0;
   }
@@ -2468,6 +2760,10 @@ svg {
   .block-plan-card,
   .clarification-card {
     padding: 16px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

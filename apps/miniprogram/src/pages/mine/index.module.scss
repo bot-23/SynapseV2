@@ -225,6 +225,82 @@
   border-radius: $radius-button;
 }
 
+.secondaryButton {
+  @include button-reset;
+  width: 100%;
+  height: $button-height-md;
+  margin-top: $spacing-md;
+  color: $color-primary;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  background: $color-bg-page;
+  border: 1rpx solid $color-divider;
+  border-radius: $radius-button;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.dashboardGrid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-md;
+}
+
+.dashboardMetric {
+  width: 50%;
+  box-sizing: border-box;
+  padding: $spacing-sm $spacing-sm $spacing-sm 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboardValue {
+  font-size: 44rpx;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+.dashboardLabel {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 4rpx;
+}
+
+.abilityRow {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-sm;
+}
+
+.abilityName {
+  flex-shrink: 0;
+  width: 140rpx;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.abilityTrack {
+  flex: 1;
+  height: 10rpx;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+  overflow: hidden;
+}
+
+.abilityFill {
+  height: 100%;
+  background: linear-gradient(90deg, $color-primary 0%, $color-primary-light 100%);
+}
+
+.abilityLevel {
+  flex-shrink: 0;
+  margin-left: $spacing-sm;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
 .bottomSpacer {
   height: 120rpx;
 }

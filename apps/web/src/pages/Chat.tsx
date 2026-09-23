@@ -35,6 +35,7 @@ export default function ChatView({ conversationId, onChangeConversation }: ChatV
   const [planningMode, setPlanningMode] = useState<'free' | 'blocks'>('free')
   const [sending, setSending] = useState(false)
   const [runtime, setRuntime] = useState(currentRuntimeMode())
+  const [assignmentHint, setAssignmentHint] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const loadMessages = useCallback((convId: string) => {
@@ -76,6 +77,13 @@ export default function ChatView({ conversationId, onChangeConversation }: ChatV
       if (saved.saved) {
         console.log('[Synapse] 计划已自动保存', saved.message)
       }
+      // 作业式计划：不覆盖短期计划，只在对话里给出跳转提示，明细看「作业」页
+      const assignment = response.assignment
+      setAssignmentHint(
+        assignment && assignment.total > 0
+          ? `作业已排进日程：共 ${assignment.total} 条，待办 ${assignment.pending_count} 条、逾期 ${assignment.overdue_count} 条。到「作业」页可以看排期和打卡。`
+          : '',
+      )
       const target = activeId ?? conversationId
       if (target) {
         loadMessages(target)
@@ -246,6 +254,14 @@ export default function ChatView({ conversationId, onChangeConversation }: ChatV
             <div className="message-row assistant">
               <div className="message-content">
                 <div className="message-bubble">正在回复…</div>
+              </div>
+            </div>
+          )}
+
+          {!sending && assignmentHint && (
+            <div className="message-row assistant">
+              <div className="message-content">
+                <div className="assignment-hint">{assignmentHint}</div>
               </div>
             </div>
           )}

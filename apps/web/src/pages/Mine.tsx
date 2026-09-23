@@ -5,6 +5,16 @@ interface MineViewProps {
   onOpenGraph: () => void
 }
 
+interface DashboardView {
+  today: { date: string; total: number; done_count: number; rate: number }
+  week: { days: Array<{ date: string; done_count: number }>; active_days: number; done_count: number }
+  assignments: { total: number; pending: number; done: number; overdue: number }
+  reviews: { total: number; due_count: number }
+  documents: number
+  subjects: Array<{ name: string; level: number; skill_score: number }>
+  plan: { version: number; updated_at: string }
+}
+
 export default function MineView({ onOpenGraph }: MineViewProps) {
   const [profile, setProfile] = useState<Record<string, unknown>>({})
   const [name, setName] = useState('')
@@ -18,6 +28,7 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
   const [subjects, setSubjects] = useState<Array<{ name: string; source: string }>>([])
   const [documentCount, setDocumentCount] = useState(0)
   const [documentNodeCount, setDocumentNodeCount] = useState(0)
+  const [dashboard, setDashboard] = useState<DashboardView | null>(null)
   const [notice, setNotice] = useState('')
   const [loadingDemo, setLoadingDemo] = useState(false)
   const runtime = currentRuntimeMode()
@@ -58,6 +69,9 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
 
     const docRes = getCore().listDocuments(DEFAULT_USER_ID)
     setDocumentCount(Number((docRes.data as Record<string, unknown> | null)?.['total'] ?? 0))
+
+    const dashboardRes = getCore().getDashboard(DEFAULT_USER_ID)
+    setDashboard((dashboardRes.data as unknown as DashboardView) ?? null)
   }
 
   useEffect(() => {
@@ -139,6 +153,28 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
     }
   }
 
+  /** F4.2：一键导出全部本地数据为 JSON 文件（数据主权归用户）。 */
+  const exportJson = () => {
+    const result = getCore().exportData(DEFAULT_USER_ID)
+    if (!result.success) {
+      flash(result.message)
+      return
+    }
+    const payload = (result.data ?? {}) as Record<string, unknown>
+    const json = JSON.stringify(payload['data'] ?? {}, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = String(payload['filename'] ?? 'synapse-export.json')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    console.log('[Synapse] 数据已导出', link.download)
+    flash(result.message)
+  }
+
   const nameLocked = Boolean(profile['display_name'])
 
   return (
@@ -155,6 +191,49 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
             {deepseekConfigured ? `已连接 ${runtime.model}` : '本地规则模式'}
           </div>
         </div>
+      </div>
+
+      <div className="mine-card">
+        <div className="card-title">学习仪表盘</div>
+        <div className="card-desc">
+          数据闭环一图流：今天做了多少、这周坚持了几天、有没有欠账、能力值往哪走。
+        </div>
+        <div className="dashboard-grid">
+          <div className="dashboard-metric">
+            <span className="dashboard-value">{dashboard?.today.rate ?? 0}%</span>
+            <span className="dashboard-label">
+              今日完成率（{dashboard?.today.done_count ?? 0}/{dashboard?.today.total ?? 0}）
+            </span>
+          </div>
+          <div className="dashboard-metric">
+            <span className="dashboard-value">{dashboard?.week.active_days ?? 0}/7</span>
+            <span className="dashboard-label">本周打卡天数</span>
+          </div>
+          <div className="dashboard-metric">
+            <span className="dashboard-value">{dashboard?.assignments.overdue ?? 0}</span>
+            <span className="dashboard-label">逾期作业</span>
+          </div>
+          <div className="dashboard-metric">
+            <span className="dashboard-value">{dashboard?.reviews.due_count ?? 0}</span>
+            <span className="dashboard-label">今天该复习</span>
+          </div>
+        </div>
+        {(dashboard?.subjects ?? []).length > 0 && (
+          <div className="dashboard-abilities">
+            {(dashboard?.subjects ?? []).map((subject) => (
+              <div key={subject.name} className="ability-row">
+                <span className="ability-name">{subject.name}</span>
+                <span className="ability-track">
+                  <span
+                    className="ability-fill"
+                    style={{ width: `${Math.min(100, (subject.skill_score / 5) * 100)}%` }}
+                  />
+                </span>
+                <span className="ability-level">Lv.{subject.level}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mine-card">
@@ -266,7 +345,13 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
 
       <div className="mine-card">
         <div className="card-title">数据管理</div>
-        <div className="card-desc">画像、计划、进度、课程表与 API Key 都只保存在这台设备上。</div>
+        <div className="card-desc">
+          画像、计划、进度、课程表与 API Key 都只保存在这台设备上。数据主权归你：随时可以导出成 JSON
+          带走。
+        </div>
+        <button type="button" className="secondary-button" onClick={exportJson}>
+          导出 JSON 数据
+        </button>
         {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO === 'true') && (
           <button
             type="button"

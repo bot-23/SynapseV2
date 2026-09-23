@@ -37,6 +37,41 @@ const SECTION_TIME_PATTERNS: RegExp[] = [
 const WEEKDAY_TOKEN_RE =
   /(周一|周二|周三|周四|周五|周六|周日|周天|星期一|星期二|星期三|星期四|星期五|星期六|星期日|星期天|礼拜一|礼拜二|礼拜三|礼拜四|礼拜五|礼拜六|礼拜日|礼拜天)/;
 
+/** 一节的时间区间（从 00:00 起算的分钟数）。 */
+export interface PeriodTime {
+  start_minute: number;
+  end_minute: number;
+}
+
+/**
+ * 默认作息模板（12 节，含常见大课间）。
+ *
+ * 教务系统导出的课表绝大多数写「第 1-2 节」而不是钟点，
+ * 之前必须手抄时间才能导入；有了这张表就能直接换算。
+ * 各校作息不同，可通过 ParseTimetableOptions.periodSchedule 覆盖。
+ */
+export const DEFAULT_PERIOD_SCHEDULE: readonly PeriodTime[] = [
+  { start_minute: 8 * 60, end_minute: 8 * 60 + 45 },
+  { start_minute: 8 * 60 + 55, end_minute: 9 * 60 + 40 },
+  { start_minute: 10 * 60, end_minute: 10 * 60 + 45 },
+  { start_minute: 10 * 60 + 55, end_minute: 11 * 60 + 40 },
+  { start_minute: 14 * 60, end_minute: 14 * 60 + 45 },
+  { start_minute: 14 * 60 + 55, end_minute: 15 * 60 + 40 },
+  { start_minute: 16 * 60, end_minute: 16 * 60 + 45 },
+  { start_minute: 16 * 60 + 55, end_minute: 17 * 60 + 40 },
+  { start_minute: 19 * 60, end_minute: 19 * 60 + 45 },
+  { start_minute: 19 * 60 + 55, end_minute: 20 * 60 + 40 },
+  { start_minute: 20 * 60 + 50, end_minute: 21 * 60 + 35 },
+  { start_minute: 21 * 60 + 45, end_minute: 22 * 60 + 30 },
+];
+
+/** 「第1-2节」「1-2节」「第3节」→ 起止节次。 */
+const PERIOD_RE = /第?\s*(\d{1,2})\s*(?:[-~～—－至到]\s*(\d{1,2}))?\s*节/;
+
+/** 教室：A101 / 101 / 教一101 / 文渊楼302 / 实验楼 这类明确编号。 */
+const CLASSROOM_RE =
+  /^(?:[A-Za-z\u4e00-\u9fa5]{0,4}\d{2,4}[A-Za-z]?|.{1,10}(?:楼|室|馆|报告厅|阶梯教室).{0,8})$/;
+
 function toMinute(hour: number, minute: number): number {
   return hour * 60 + minute;
 }
@@ -75,6 +110,96 @@ function extractTimeRange(
   return null;
 }
 
+/** 把「第 N-M 节」按作息表换算成具体时间；没有节次或超出作息表范围时返回 null。 */
+function resolvePeriodRange(
+  line: string,
+  schedule: readonly PeriodTime[],
+): { startMinute: number; endMinute: number; matchedText: string } | null {
+  const matched = PERIOD_RE.exec(line);
+  if (!matched) {
+    return null;
+  }
+  const first = Number(matched[1]);
+  const last = matched[2] ? Number(matched[2]) : first;
+  if (!Number.isFinite(first) || !Number.isFinite(last)) {
+    return null;
+  }
+  const from = Math.min(first, last);
+  const to = Math.max(first, last);
+  if (from < 1 || to > schedule.length) {
+    return null;
+  }
+  const startMinute = schedule[from - 1]!.start_minute;
+  const endMinute = schedule[to - 1]!.end_minute;
+  if (endMinute <= startMinute) {
+    return null;
+  }
+  return { startMinute, endMinute, matchedText: matched[0] };
+}
+
+/**
+ * 这条课在第 week 教学周是否要上。
+ * weeks 为空 = 每周；"1-16" = 区间；"3" = 单个周次；"单周"/"双周" = 奇偶周。
+ * week 非法（未提供/小于 1）时一律返回 true，保持「不传周次就全算」的旧行为。
+ */
+export function is_entry_active_in_week(weeks: string, week: number): boolean {
+  const value = String(weeks ?? "").trim();
+  if (!value) {
+    return true;
+  }
+  if (!Number.isFinite(week) || week < 1) {
+    return true;
+  }
+  if (value === "单周") {
+    return week % 2 === 1;
+  }
+  if (value === "双周") {
+    return week % 2 === 0;
+  }
+  const range = /^(\d{1,2})-(\d{1,2})$/.exec(value);
+  if (range) {
+    const from = Number(range[1]);
+    const to = Number(range[2]);
+    return week >= Math.min(from, to) && week <= Math.max(from, to);
+  }
+  if (/^\d{1,2}$/.test(value)) {
+    return week === Number(value);
+  }
+  return true;
+}
+
+/**
+ * 从「课程名 + 可能的教室/教师」里分离出结构化字段。
+ *
+ * 刻意保守：只有明确像教室的 token 才会被摘出来，教师必须带「老师/教师」后缀。
+ * 认不出来的一律并回课程名 —— 否则会把课程名误当成教师名，比不解析更糟。
+ */
+function splitNameLocationTeacher(tokens: string[]): {
+  name: string;
+  location: string;
+  teacher: string;
+} {
+  if (tokens.length <= 1) {
+    return { name: tokens[0] ?? "", location: "", teacher: "" };
+  }
+  const nameParts: string[] = [tokens[0]!];
+  let location = "";
+  let teacher = "";
+  for (const token of tokens.slice(1)) {
+    if (!location && CLASSROOM_RE.test(token)) {
+      location = token;
+      continue;
+    }
+    const teacherMatch = /^([\u4e00-\u9fa5]{2,4})(?:老师|教师)$/.exec(token);
+    if (!teacher && teacherMatch) {
+      teacher = teacherMatch[1]!;
+      continue;
+    }
+    nameParts.push(token);
+  }
+  return { name: nameParts.join(" "), location, teacher };
+}
+
 function extractWeeks(line: string): string {
   // 1-16周 / 第1-16周 / 1~16 / 单周 / 双周
   const rangeMatch = /(?:第)?\s*(\d{1,2})\s*[-~～—－至到]\s*(\d{1,2})\s*周?/.exec(line);
@@ -111,17 +236,21 @@ function cleanFragment(text: string): string {
 export interface ParseTimetableOptions {
   defaultSubject?: string;
   idGen?: IdGen;
+  /** 自定义作息表；缺省用 DEFAULT_PERIOD_SCHEDULE 换算「第 N-M 节」。 */
+  periodSchedule?: readonly PeriodTime[];
 }
 
 /**
  * 解析课表文本。
  * 支持每行一门课（含星期与时间），也支持「星期表头 + 逐行课程」的表格粘贴。
+ * 时间既可写钟点（08:00-09:40），也可写节次（第1-2节，按作息表换算）。
  */
 export function parse_timetable_text(
   text: string,
   options: ParseTimetableOptions = {},
 ): TimetableParseResult {
   const idGen = options.idGen ?? systemIdGen;
+  const schedule = options.periodSchedule ?? DEFAULT_PERIOD_SCHEDULE;
   const entries: TimetableEntry[] = [];
   const unparsedLines: string[] = [];
   const warnings: string[] = [];
@@ -136,7 +265,9 @@ export function parse_timetable_text(
 
     // 纯表头行：只更新「当前星期」上下文
     const weekdayToken = WEEKDAY_TOKEN_RE.exec(normalized);
-    const timeRange = extractTimeRange(normalized);
+    // 钟点优先；没有钟点时退回「第 N-M 节」+ 作息表
+    const clockRange = extractTimeRange(normalized);
+    const timeRange = clockRange ?? resolvePeriodRange(normalized, schedule);
 
     if (weekdayToken && !timeRange) {
       const parsed = parseWeekday(weekdayToken[0]);
@@ -159,7 +290,7 @@ export function parse_timetable_text(
       continue;
     }
 
-    // 先摘掉时间区间再解析周次，避免把「08:00-09:40」误认成周次区间
+    // 先摘掉时间/节次再解析周次，避免把「08:00-09:40」「1-2节」误认成周次区间
     const lineWithoutTime = normalized.replace(timeRange.matchedText, " ");
     const weeks = extractWeeks(lineWithoutTime);
     const rest = cleanFragment(
@@ -177,17 +308,20 @@ export function parse_timetable_text(
       continue;
     }
 
-    const subject = (options.defaultSubject ?? "").trim() || rest;
+    // 教室/教师只在能明确识别时摘出，其余还原进课程名
+    const parts = splitNameLocationTeacher(rest.split(/\s+/).filter(Boolean));
+    const courseName = parts.name || rest;
+    const subject = (options.defaultSubject ?? "").trim() || courseName;
     entries.push({
       id: idGen.next(),
-      name: rest,
+      name: courseName,
       subject,
       weekday: resolvedWeekday,
       startMinute: timeRange.startMinute,
       endMinute: timeRange.endMinute,
       weeks,
-      location: "",
-      teacher: "",
+      location: parts.location,
+      teacher: parts.teacher,
     });
   }
 
@@ -216,15 +350,17 @@ function weekdayLabel(weekday: number): string {
 /**
  * 汇总某星期几的占用情况。
  * freeMinutes 以「可支配时间窗」计：默认按 08:00–22:00 共 840 分钟减去占用。
+ * week 传 0（默认）时不按单双周/周次过滤，即把课表当作每周固定 —— 旧行为不变。
  */
 export function summarize_day_busy(
   entries: TimetableEntry[],
   weekday: number,
   windowStartMinute = 8 * 60,
   windowEndMinute = 22 * 60,
+  week = 0,
 ): DayBusySummary {
   const dayEntries = entries
-    .filter((entry) => entry.weekday === weekday)
+    .filter((entry) => entry.weekday === weekday && is_entry_active_in_week(entry.weeks, week))
     .sort((a, b) => a.startMinute - b.startMinute);
 
   let busyMinutes = 0;
@@ -253,13 +389,13 @@ export function summarize_day_busy(
 }
 
 /** 生成给计划生成用的课表上下文（无课表时返回空数组，保证旧行为不变）。 */
-export function build_timetable_context(entries: TimetableEntry[]): string[] {
+export function build_timetable_context(entries: TimetableEntry[], week = 0): string[] {
   if (!entries.length) {
     return [];
   }
   const lines: string[] = [`课程表：已导入 ${entries.length} 节课，计划需避开这些时段。`];
   for (let weekday = 1; weekday <= 7; weekday += 1) {
-    const summary = summarize_day_busy(entries, weekday);
+    const summary = summarize_day_busy(entries, weekday, 8 * 60, 22 * 60, week);
     if (!summary.entries.length) {
       continue;
     }

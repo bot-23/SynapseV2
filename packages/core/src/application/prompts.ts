@@ -80,7 +80,11 @@ export function buildIntentPrompt(
     "  - 用户想改当前计划强度/时长/难度/练习量 → tweak_plan(changes, subject)\n" +
     "  - 用户对上一轮计划不满 → restart_plan(subject, reason)\n" +
     "  - 用户要求出题/解释/教方法 → teach(subject, action, topic)\n" +
+    "  - 用户把老师布置的作业/习题甩过来，带截止时间 → submit_assignment(text)\n" +
     "  - 闲聊/共情 → reply(message)\n\n" +
+    "作业句式样本：「数学第三章习题1-20明天交」「英语背Unit3单词周五默写」\n" +
+    "「物理第五章卷子一张明天交」「周记800字下周一交」—— 这些都要走 submit_assignment，\n" +
+    "不要把作业当成学习目标去 create_plan。\n\n" +
     "绝对禁止：用 reply 写计划文本。只要用户要计划，必须调 create_plan。\n" +
     "一次可以调多个工具（如先 remember 记住信息 + ask 追问更多）。\n\n" +
     profileText +
@@ -203,4 +207,50 @@ export function buildRulePlanMessagePrompt(
     deadlineNote +
     "请用1-2句话自然、温暖、简洁地介绍这份计划给用户。"
   );
+}
+
+/**
+ * v2：作业清单结构化抽取。
+ * 只负责「把原话变成条目」，排期交给 core 的确定性算法 —— 模型不该决定时间怎么摊。
+ */
+export function buildAssignmentPrompt(
+  today: string,
+  message: string,
+  retrievedContext: string[] = [],
+): string {
+  const context =
+    allocate_context_budget(retrievedContext, 4)
+      .map((item) => `- ${item}`)
+      .join("\n") || "- 暂无检索资料";
+  return `
+你是一个作业清单解析节点。用户会把老师布置的作业原话交给你，请只输出 JSON，不要输出 Markdown，不要展示推理过程。
+
+今天日期：${today}
+用户原话：${message}
+
+可用资料摘要：
+${context}
+
+JSON 格式必须为：
+{
+  "items": [
+    {
+      "subject": "科目名，如 数学",
+      "title": "作业标题（去掉日期词与「要交」这类尾巴，如 第三章习题）",
+      "quantity": 20,
+      "unit": "题",
+      "due_date": "YYYY-MM-DD",
+      "estimated_minutes": 60
+    }
+  ],
+  "unparsed": "没能解析成条目的部分，原样放这里；全都解析出来了就填空字符串"
+}
+
+约束：
+- due_date 必须结合今天（${today}）解析成绝对日期，禁止输出「明天」「周五」这类相对说法。
+- 用户没说数量时 quantity 填 0、unit 填空字符串。
+- 用户没说时长时按 1题≈3分钟、1页≈10分钟、1单词≈0.5分钟估算 estimated_minutes。
+- 一句话里有多件事就拆成多个 item（「数学第三章习题1-20明天交，英语背Unit3单词周五默写」= 2 个 item）。
+- 千万不要编造用户没提过的作业；解析不出的内容放进 unparsed，不要静默丢弃。
+`.trim();
 }

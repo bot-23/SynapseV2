@@ -9,9 +9,10 @@ import DocumentsView from './pages/Documents'
 import TimetableView from './pages/Timetable'
 import Onboarding from './pages/Onboarding'
 import GraphView from './pages/Graph'
+import AssignmentsView from './pages/Assignments'
 import type { ConversationCard } from './utils/prefs'
 
-type View = 'chat' | 'plan' | 'mine' | 'documents' | 'timetable' | 'graph'
+type View = 'chat' | 'plan' | 'mine' | 'documents' | 'timetable' | 'graph' | 'assignments'
 
 export default function App() {
   const [ready, setReady] = useState(false)
@@ -95,6 +96,7 @@ export default function App() {
         {view === 'graph' && <GraphView onBack={() => setView('mine')} />}
         {view === 'documents' && <DocumentsView />}
         {view === 'timetable' && <TimetableView />}
+        {view === 'assignments' && <AssignmentsView />}
       </main>
     </div>
   )

@@ -94,6 +94,7 @@
 
 .docRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   padding: $spacing-md 0;
@@ -102,6 +103,69 @@
   &:last-child {
     border-bottom: none;
   }
+}
+
+.docTitleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.docSubject {
+  margin-left: $spacing-xs;
+  padding: 2rpx $spacing-sm;
+  border-radius: $radius-button;
+  background: rgba(91, 108, 255, 0.1);
+  font-size: $font-size-xs;
+  color: $color-primary;
+}
+
+.docSource {
+  margin-left: $spacing-xs;
+  padding: 2rpx $spacing-sm;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.docTags {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-xs;
+}
+
+.docTag {
+  margin-right: $spacing-xs;
+  padding: 2rpx $spacing-sm;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+.docEditor {
+  width: 100%;
+  margin-top: $spacing-sm;
+  padding-top: $spacing-sm;
+  border-top: 1rpx dashed $color-divider;
+}
+
+.docEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: $spacing-sm;
+}
+
+.docEditorPrimary {
+  margin-left: $spacing-sm;
+  background: $color-primary;
+}
+
+.docEditorPrimaryText {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+  white-space: nowrap;
 }
 
 .docInfo {

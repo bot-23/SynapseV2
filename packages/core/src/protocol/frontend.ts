@@ -3,7 +3,7 @@
  * 翻译自 Synapse/backend/app/schemas/copilot.py 与 common.py（字段名/默认值逐字保留）。
  */
 
-import type { BlockPlan, LongTermPlan, StudyPlanPayload } from "./study.js";
+import type { AssignmentSnapshot, BlockPlan, LongTermPlan, StudyPlanPayload } from "./study.js";
 
 export interface FrontendAttachment {
   id: string | null;
@@ -94,6 +94,11 @@ export interface StudyPilotRunResponse {
    * 仅当目标跨度超过一周时产出；纯一周内的目标保持为 undefined，旧行为不变。
    */
   longPlan?: LongTermPlan | null;
+  /**
+   * 作业看板（v2 新增，可选）。
+   * 与 longPlan 同样只在本次请求真的产生作业时才出现，旧路径的响应形状逐字不变。
+   */
+  assignment?: AssignmentSnapshot | null;
   memory_used: FrontendMemory[];
   memory_candidates: Record<string, unknown>[];
   model_provider: string;

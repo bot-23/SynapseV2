@@ -9,7 +9,7 @@ import { formatRelativeTime } from '../utils/format'
 import { getCore } from '../services/synapse'
 
 interface SidebarProps {
-  view: 'chat' | 'plan' | 'mine' | 'documents' | 'timetable' | 'graph'
+  view: 'chat' | 'plan' | 'mine' | 'documents' | 'timetable' | 'graph' | 'assignments'
   profileName: string
   conversations: ConversationCard[]
   activeConversationId: string
@@ -22,6 +22,7 @@ interface SidebarProps {
 const NAV_ITEMS: Array<{ key: Exclude<SidebarProps['view'], 'graph'>; label: string }> = [
   { key: 'chat', label: '对话' },
   { key: 'plan', label: '计划' },
+  { key: 'assignments', label: '作业' },
   { key: 'documents', label: '资料库' },
   { key: 'timetable', label: '课程表' },
   { key: 'mine', label: '我的' },

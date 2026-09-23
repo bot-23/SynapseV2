@@ -3,6 +3,7 @@
  */
 
 import type { RuntimeStore } from "../storage/runtimeStore.js";
+import { infer_subject_from_text } from "../domain/subjectInfer.js";
 
 export class ProgressService {
   constructor(private readonly store: RuntimeStore) {}
@@ -71,30 +72,14 @@ export class ProgressService {
     return result;
   }
 
+  /** 科目推断已提升为 domain 的公共函数，这里只负责取出计划 focus 作为兜底输入。 */
   private _infer_subject(goal: string, userId: string): string {
-    let subject = "通用";
-    for (const prefix of ["我要复习", "复习", "学习", "准备"]) {
-      if (goal.includes(prefix)) {
-        subject =
-          goal
-            .slice(goal.indexOf(prefix) + prefix.length)
-            .replace(/^[。，. ]+|[。，. ]+$/g, "")
-            .slice(0, 20) || "通用";
-        break;
-      }
-    }
-    if (subject !== "通用") {
-      return subject;
-    }
-
     const saved = this.store.get_plan(userId);
-    if (saved && saved.weekly_plan.length) {
-      const focus = String((saved.weekly_plan[0] as Record<string, unknown>)["focus"] ?? "");
-      return (
-        focus.split("入门")[0]!.split("专项")[0]!.split("综合")[0]!.trim() || "通用"
-      );
-    }
-    return "通用";
+    const focus =
+      saved && saved.weekly_plan.length
+        ? String((saved.weekly_plan[0] as Record<string, unknown>)["focus"] ?? "")
+        : "";
+    return infer_subject_from_text(goal, focus);
   }
 
   private _build_user_id(name: string | null): string {

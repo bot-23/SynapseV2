@@ -111,6 +111,17 @@ export class KgBuilder {
 
     const addedNodes = this.store.addKgNodes([documentNode, ...topicNodes]);
     const addedEdges = this.store.addKgEdges(edges);
+    // F1：把生成的节点 ID 回写到资料上，形成「资料 → 图谱」的可查证据链。
+    const generatedIds = [documentNode.id, ...topicNodes.map((node) => node.id)];
+    const current = this.store
+      .get_documents(userId)
+      .find((item) => String(item["doc_id"] ?? "") === docId);
+    const existingIds = Array.isArray(current?.["kg_node_ids"])
+      ? (current!["kg_node_ids"] as unknown[]).map((id) => String(id))
+      : [];
+    this.store.update_document(userId, docId, {
+      kg_node_ids: [...existingIds, ...generatedIds],
+    });
     return {
       doc_id: docId,
       file_name: documentNode.name,

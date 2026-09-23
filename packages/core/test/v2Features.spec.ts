@@ -6,9 +6,11 @@
 import { describe, expect, it } from "vitest";
 
 import { createSynapseCore, type SynapseCore } from "../src/application/core.js";
+import { MemoryKvStore } from "../src/storage/kv.js";
 import {
   apply_timetable_to_payload,
   build_timetable_context,
+  is_entry_active_in_week,
   parse_timetable_text,
   summarize_day_busy,
 } from "../src/domain/timetable.js";
@@ -41,9 +43,15 @@ import type {
   GenerateWithToolsResult,
   LlmProvider,
 } from "../src/providers/contracts.js";
-import type { StudyPlanRequest, TimetableEntry } from "../src/protocol/study.js";
+import type { AssignmentItem, StudyPlanRequest, TimetableEntry } from "../src/protocol/study.js";
 import type { StudyPilotRunRequest } from "../src/protocol/frontend.js";
 import { buildTeachPrompt } from "../src/application/prompts.js";
+import {
+  build_assignment_schedule,
+  looks_like_assignment,
+  parse_assignment_due,
+  parse_assignment_items,
+} from "../src/domain/assignment.js";
 import { KgBuilder } from "../src/application/kgBuilder.js";
 import { KgRetrievalProvider } from "../src/providers/kgRetrieval.js";
 
@@ -204,6 +212,74 @@ describe("课程表解析", () => {
     const result = parse_timetable_text("周三　线性代数　14：00～15：40", { idGen: testIdGen });
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]).toMatchObject({ weekday: 3, startMinute: 14 * 60 });
+  });
+
+  it("节次写法按默认作息表换算，且不会被误当成周次", () => {
+    const result = parse_timetable_text(
+      ["周一 高等数学 第1-2节", "周三 线性代数 第3-4节 1-16周"].join("\n"),
+      { idGen: testIdGen },
+    );
+
+    expect(result.entries).toHaveLength(2);
+    expect(result.unparsedLines).toEqual([]);
+    expect(result.entries[0]).toMatchObject({
+      name: "高等数学",
+      weekday: 1,
+      startMinute: 8 * 60,
+      endMinute: 9 * 60 + 40,
+    });
+    expect(result.entries[0]!.weeks).toBe("");
+    expect(result.entries[1]).toMatchObject({
+      name: "线性代数",
+      weekday: 3,
+      weeks: "1-16",
+      startMinute: 10 * 60,
+      endMinute: 11 * 60 + 40,
+    });
+  });
+
+  it("支持自定义作息表", () => {
+    const result = parse_timetable_text("周一 高等数学 第1-2节", {
+      idGen: testIdGen,
+      periodSchedule: [
+        { start_minute: 9 * 60, end_minute: 9 * 60 + 50 },
+        { start_minute: 10 * 60, end_minute: 10 * 60 + 50 },
+      ],
+    });
+    expect(result.entries[0]).toMatchObject({
+      startMinute: 9 * 60,
+      endMinute: 10 * 60 + 50,
+    });
+  });
+
+  it("识别教室与教师，认不出的部分保留在课程名里", () => {
+    const result = parse_timetable_text(
+      ["周一 高等数学 08:00-09:40 A101 张三老师", "周二 大学物理 10:00-11:40 待定"].join("\n"),
+      { idGen: testIdGen },
+    );
+
+    expect(result.entries[0]).toMatchObject({
+      name: "高等数学",
+      location: "A101",
+      teacher: "张三",
+    });
+    // 「待定」既不像教室也不像教师，应并回课程名而不是乱猜
+    expect(result.entries[1]).toMatchObject({
+      name: "大学物理 待定",
+      location: "",
+      teacher: "",
+    });
+  });
+
+  it("单双周与周次区间可用于过滤当周课表", () => {
+    expect(is_entry_active_in_week("", 3)).toBe(true);
+    expect(is_entry_active_in_week("单周", 3)).toBe(true);
+    expect(is_entry_active_in_week("单周", 4)).toBe(false);
+    expect(is_entry_active_in_week("双周", 4)).toBe(true);
+    expect(is_entry_active_in_week("1-8", 9)).toBe(false);
+    expect(is_entry_active_in_week("5", 5)).toBe(true);
+    // 未提供周次（0）时不过滤，保持旧行为
+    expect(is_entry_active_in_week("单周", 0)).toBe(true);
   });
 });
 
@@ -1157,6 +1233,35 @@ describe("core v2：资料库（粘贴导入 + BM25）", () => {
     expect(removed.success).toBe(true);
     expect((core.listDocuments().data as Record<string, unknown>)["total"]).toBe(0);
   });
+
+  it("选文件导入不再截断到 6000 字，且支持 Markdown", async () => {
+    const core = createSynapseCore({ idGen: testIdGen });
+
+    // 约 1.2 万字：旧实现会把 6000 字之后的内容静默丢掉
+    const tail = "末尾标记词";
+    const longText = `${"函数单调性讨论。".repeat(1500)}${tail}`;
+    const attachments = await core.extractFiles([
+      {
+        name: "错题笔记.md",
+        contentType: "text/markdown",
+        data: new TextEncoder().encode(longText),
+      },
+    ]);
+
+    const attachment = attachments[0]!;
+    expect(attachment.extraction_status).toBe("done");
+    const extracted = String(attachment.extracted_text);
+    expect(extracted.length).toBeGreaterThan(6000);
+    // 尾部内容没有被丢掉
+    expect(extracted.endsWith(tail)).toBe(true);
+
+    // 切出的片段数应与完整正文相符（旧上限下只能切出约 19 段）
+    const imported = core.importDocument("default", "错题笔记.md", extracted);
+    expect(imported.success).toBe(true);
+    const listed = core.listDocuments().data as Record<string, unknown>;
+    const doc = (listed["documents"] as Array<Record<string, unknown>>)[0]!;
+    expect(Number(doc["chunk_count"])).toBeGreaterThan(25);
+  });
 });
 
 describe("core v2：资料自动构建知识图谱", () => {
@@ -1225,6 +1330,113 @@ describe("core v2：资料自动构建知识图谱", () => {
     expect(Object.values(core.progress.get_task_progress("default")).filter(Boolean)).toHaveLength(2);
     expect(core.listReviews().data?.due_count).toBeGreaterThanOrEqual(2);
     expect(core.store.kgNodes().some((node) => node.id.startsWith("doc_demo-mat"))).toBe(true);
+  });
+});
+
+describe("core v2：资料结构化元数据（F1）", () => {
+  const firstDoc = (core: SynapseCore): Record<string, unknown> => {
+    const listed = core.listDocuments().data as Record<string, unknown>;
+    return (listed["documents"] as Array<Record<string, unknown>>)[0]!;
+  };
+
+  it("导入时自动推断科目并补齐元数据", () => {
+    const core = createSynapseCore({ idGen: testIdGen });
+    const imported = core.importDocument(
+      "default",
+      "高三数学错题笔记.txt",
+      "函数与导数：含参函数单调性讨论，先求导再按参数分类。圆锥曲线注意斜率不存在。",
+    );
+    expect(imported.success).toBe(true);
+
+    const doc = firstDoc(core);
+    expect(doc["subject"]).toBe("数学");
+    expect(doc["source"]).toBe("upload");
+    expect(doc["tags"]).toEqual([]);
+    expect(Number(doc["char_count"])).toBeGreaterThan(0);
+    expect(Number(doc["kg_node_count"])).toBe(0);
+    expect(Number(doc["review_card_count"])).toBe(0);
+  });
+
+  it("粘贴来源会标记为 paste，也可显式指定科目", () => {
+    const core = createSynapseCore({ idGen: testIdGen });
+    core.importDocument("default", "随手记", "今天学了点东西，没什么关键词。", {
+      source: "paste",
+      subject: "物理",
+    });
+
+    const doc = firstDoc(core);
+    expect(doc["source"]).toBe("paste");
+    expect(doc["subject"]).toBe("物理");
+  });
+
+  it("改标题 / 科目 / 标签后可由列表读回", () => {
+    const core = createSynapseCore({ idGen: testIdGen });
+    const imported = core.importDocument("default", "无名资料", "一些内容。");
+    const docId = String(
+      ((imported.data as Record<string, unknown>)["documents"] as Array<Record<string, unknown>>)[0]![
+        "doc_id"
+      ],
+    );
+
+    const updated = core.updateDocument("default", docId, {
+      file_name: "化学笔记",
+      subject: "化学",
+      tags: ["易错", "有机"],
+    });
+    expect(updated.success).toBe(true);
+
+    const doc = firstDoc(core);
+    expect(doc["file_name"]).toBe("化学笔记");
+    expect(doc["subject"]).toBe("化学");
+    expect(doc["tags"]).toEqual(["易错", "有机"]);
+  });
+
+  it("构图与抽卡后回写节点 ID 与卡片 ID", async () => {
+    const core = createSynapseCore({ idGen: testIdGen, config: { offlinePlanFallback: true } });
+    const imported = core.importDocument(
+      "default",
+      "物理错题",
+      "受力分析受力分析受力分析，牛顿定律牛顿定律，摩擦力摩擦力。",
+    );
+    const docId = String(
+      ((imported.data as Record<string, unknown>)["documents"] as Array<Record<string, unknown>>)[0]![
+        "doc_id"
+      ],
+    );
+
+    const built = await core.buildKgFromDocument(docId);
+    expect(built.success).toBe(true);
+    expect(Number(firstDoc(core)["kg_node_count"])).toBeGreaterThan(0);
+    expect(Number(firstDoc(core)["review_card_count"])).toBeGreaterThan(0);
+
+    // 重复抽卡幂等，不会重复建卡
+    const before = core.store.get_reviews("default").length;
+    const again = core.generateReviewCardsFromDocument("default", docId);
+    expect(again.success).toBe(true);
+    expect(core.store.get_reviews("default").length).toBe(before);
+  });
+
+  it("旧格式资料（无新字段）读取不报错且带默认值", () => {
+    // 直接写入旧结构的原始记录，模拟升级前已存在的资料
+    const kv = new MemoryKvStore();
+    kv.set("documents:default", [
+      {
+        doc_id: "legacy-1",
+        user_id: "default",
+        file_name: "旧笔记.txt",
+        excerpt: "旧内容",
+        chunks: [{ chunk_id: "legacy-1-chunk-1", text: "旧内容", keywords: [] }],
+      },
+    ]);
+    const core = createSynapseCore({ kv, idGen: testIdGen });
+
+    const doc = firstDoc(core);
+    expect(doc["file_name"]).toBe("旧笔记.txt");
+    expect(doc["subject"]).toBe("");
+    expect(doc["source"]).toBe("upload");
+    expect(Number(doc["char_count"])).toBe(0);
+    expect(Number(doc["kg_node_count"])).toBe(0);
+    expect(Number(doc["chunk_count"])).toBe(1);
   });
 });
 
@@ -1462,6 +1674,262 @@ describe("core v2：今日列表的缓存失效", () => {
     const items = afterToday["items"] as Array<Record<string, unknown>>;
     expect(items.length).toBeGreaterThan(0);
     expect(String(afterToday["plan_version"])).toBe("1");
+  });
+});
+
+describe("core v2：作业式计划（F3）", () => {
+  /** 2026-03-04 是周三，用它固定「本周五 / 下周一」这类相对日期的解析结果。 */
+  const TODAY = "2026-03-04";
+  const fixedClock = { nowIso: () => `${TODAY}T09:00:00.000Z` };
+
+  function assignmentItem(patch: Partial<AssignmentItem> = {}): AssignmentItem {
+    return {
+      id: `a-${++idCounter}`,
+      subject: "数学",
+      title: "第三章习题",
+      quantity: 20,
+      unit: "题",
+      due_date: TODAY,
+      estimated_minutes: 60,
+      status: "pending",
+      done_at: "",
+      created_at: TODAY,
+      source_text: "数学第三章习题1-20明天交",
+      review_card_ids: [],
+      plan_id: "",
+      plan_version: null,
+      original_due_date: "",
+      rescheduled_at: "",
+      ...patch,
+    };
+  }
+
+  /** 自称 deepseek 的假模型：意图走工具调用，抽取走 JSON。 */
+  class AssignmentLlm implements LlmProvider {
+    readonly prompts: string[] = [];
+
+    constructor(
+      private readonly toolName: string,
+      private readonly toolArgs: Record<string, unknown>,
+      private readonly extraction: Record<string, unknown>,
+    ) {}
+
+    describe(): Record<string, unknown> {
+      return { provider: "deepseek", model: "assignment-llm", status: "ready" };
+    }
+
+    async generateWithTools(
+      prompt: string,
+      _tools: unknown[],
+      forceTool = "",
+    ): Promise<GenerateWithToolsResult> {
+      this.prompts.push(prompt);
+      const name = forceTool || this.toolName;
+      const args = name === "submit_assignment" ? this.toolArgs : { subject: "数学", goal: "备考" };
+      return { tool_calls: [{ name, args }] };
+    }
+
+    async generateText(prompt: string): Promise<string> {
+      this.prompts.push(prompt);
+      return PLAN_JSON;
+    }
+
+    async generateJson(prompt: string): Promise<Record<string, unknown>> {
+      this.prompts.push(prompt);
+      return this.extraction;
+    }
+
+    async *streamText(): AsyncIterable<string> {
+      yield "";
+    }
+  }
+
+  it("离线日期解析覆盖 今天/明天/周五/下周一/月日/还有 X 天", () => {
+    expect(parse_assignment_due("明天交", TODAY)).toBe("2026-03-05");
+    expect(parse_assignment_due("后天要交", TODAY)).toBe("2026-03-06");
+    expect(parse_assignment_due("周五前交", TODAY)).toBe("2026-03-06");
+    expect(parse_assignment_due("下周一交", TODAY)).toBe("2026-03-09");
+    expect(parse_assignment_due("3月10日交", TODAY)).toBe("2026-03-10");
+    expect(parse_assignment_due("还有 5 天", TODAY)).toBe("2026-03-09");
+    expect(parse_assignment_due("随便写点什么", TODAY)).toBeNull();
+  });
+
+  it("离线规则把一句话拆成多条作业，并推断科目、数量与估时", () => {
+    const drafts = parse_assignment_items(
+      "数学第三章习题1-20明天交，英语背Unit3单词周五默写",
+      TODAY,
+    );
+
+    expect(drafts).toHaveLength(2);
+    expect(drafts[0]).toMatchObject({
+      subject: "数学",
+      quantity: 20,
+      unit: "题",
+      due_date: "2026-03-05",
+      estimated_minutes: 60,
+    });
+    expect(drafts[0]!.title).toContain("习题1-20");
+    expect(drafts[1]).toMatchObject({ subject: "英语", due_date: "2026-03-06" });
+    // 「Unit3」里的 3 不是数量，不能被当成 3 个单词
+    expect(drafts[1]!.unit).not.toBe("单词");
+  });
+
+  it("排期按截止日摊量，且每天不超每日预算", () => {
+    const schedule = build_assignment_schedule({
+      items: [assignmentItem({ due_date: "2026-03-06" })],
+      today: TODAY,
+      daily_minutes: 30,
+    });
+
+    expect(schedule.map((day) => day.date)).toEqual([
+      "2026-03-04",
+      "2026-03-05",
+      "2026-03-06",
+    ]);
+    for (const day of schedule) {
+      expect(day.total_minutes).toBeLessThanOrEqual(30);
+      expect(day.tasks.every((task) => task.title.startsWith("作业 · 截止"))).toBe(true);
+    }
+    expect(schedule[0]!.tasks[0]!.title).toContain("第 1-7 题");
+  });
+
+  it("有模型 Key 时走 JSON 抽取，返回作业看板并落库", async () => {
+    const llm = new AssignmentLlm(
+      "submit_assignment",
+      { text: "数学第三章习题1-20明天交" },
+      {
+        items: [
+          {
+            subject: "数学",
+            title: "第三章习题",
+            quantity: 20,
+            unit: "题",
+            due_date: "2026-03-05",
+            estimated_minutes: 60,
+          },
+        ],
+        unparsed: "",
+      },
+    );
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.workflow.providers = { ...core.workflow.providers, llm };
+
+    const response = await core.run({ ...runPayload("conv-assignment"), input: "数学第三章习题1-20明天交" });
+
+    expect(response.mode).toBe("assignment-intake");
+    expect(response.assignment?.total).toBe(1);
+    expect(response.assignment?.items[0]).toMatchObject({
+      subject: "数学",
+      quantity: 20,
+      due_date: "2026-03-05",
+      status: "pending",
+    });
+    // 抽取提示词里必须带今天的日期，否则模型算不出绝对截止日
+    expect(llm.prompts.some((prompt) => prompt.includes(`今天日期：${TODAY}`))).toBe(true);
+    expect(core.store.get_assignments("default")).toHaveLength(1);
+  });
+
+  it("逾期项被标记并能在重排后挪到后续几天", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.store.save_assignments("default", [
+      assignmentItem({ due_date: "2026-03-02", estimated_minutes: 60 }),
+    ]);
+
+    const before = core.listAssignments();
+    expect(before.data!["overdue_count"]).toBe(1);
+
+    const after = core.rescheduleOverdueAssignments();
+    expect(after.data!["overdue_count"]).toBe(0);
+    const item = (after.data!["items"] as AssignmentItem[])[0]!;
+    expect(item.original_due_date).toBe("2026-03-02");
+    expect(item.due_date > TODAY).toBe(true);
+    expect(item.status).toBe("pending");
+  });
+
+  it("解析不出时走澄清追问，用户补一句后重新解析成功", async () => {
+    const llm = new AssignmentLlm(
+      "submit_assignment",
+      { text: "把这周的实验报告整理一下" },
+      { items: [], unparsed: "把这周的实验报告整理一下" },
+    );
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.workflow.providers = { ...core.workflow.providers, llm };
+
+    const first = await core.run({
+      ...runPayload("conv-assignment-clarify"),
+      input: "把这周的实验报告整理一下",
+    });
+    expect(first.status).toBe("needs_clarification");
+    expect(first.mode).toBe("assignment-intake");
+
+    const second = await core.confirm({
+      sessionId: first.clarification!.sessionId,
+      answers: [{ questionId: "q1", answer: "周五交" }],
+    });
+    expect(second.assignment?.total).toBe(1);
+    expect(second.assignment?.items[0]!.title).toContain("实验报告");
+    expect(second.assignment?.items[0]!.due_date).toBe("2026-03-06");
+  });
+
+  it("打卡后状态翻转，并自动进入复习队列", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    // mock provider 下走离线规则解析，不需要模型
+    await core.createAssignments("default", "数学第三章习题1-20明天交");
+
+    const items = core.listAssignments().data!["items"] as AssignmentItem[];
+    expect(items).toHaveLength(1);
+
+    const done = core.completeAssignment("default", items[0]!.id, true);
+    const doneItem = done.data!["item"] as AssignmentItem;
+    expect(doneItem.status).toBe("done");
+    expect(doneItem.done_at).toBe(TODAY);
+    expect(doneItem.review_card_ids.length).toBe(1);
+    expect(core.store.get_reviews("default")).toHaveLength(1);
+
+    // 取消打卡：状态回到待办，复习卡不重复生成
+    const undone = core.completeAssignment("default", items[0]!.id, false);
+    expect((undone.data!["item"] as AssignmentItem).status).toBe("pending");
+    expect(core.store.get_reviews("default")).toHaveLength(1);
+  });
+
+  it("作业句式只认强信号，普通学习请求不会被误判", () => {
+    expect(looks_like_assignment("数学第三章习题1-20明天交")).toBe(true);
+    expect(looks_like_assignment("英语背Unit3单词周五默写")).toBe(true);
+    expect(looks_like_assignment("帮我准备高等数学期末考试，还有 14 天，每天能学 90 分钟")).toBe(
+      false,
+    );
+    expect(looks_like_assignment("我想系统学一下线性代数")).toBe(false);
+  });
+});
+
+describe("core v2：学习仪表盘与数据导出（F4）", () => {
+  const fixedClock = { nowIso: () => "2026-03-04T09:00:00.000Z" };
+
+  it("载入演示数据后，仪表盘给出本周打卡与逾期作业", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    await core.loadDemoData();
+
+    const data = core.getDashboard().data!;
+    const week = data["week"] as Record<string, unknown>;
+    expect(Number(week["done_count"])).toBeGreaterThan(0);
+    expect(Number((data["assignments"] as Record<string, unknown>)["overdue"])).toBe(1);
+    expect(Number((data["today"] as Record<string, unknown>)["rate"])).toBeGreaterThanOrEqual(0);
+    expect(Number((data["plan"] as Record<string, unknown>)["version"])).toBeGreaterThan(0);
+  });
+
+  it("导出包含资料、作业与复习队列，但不含 API Key", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.saveApiKey("sk-should-never-be-exported");
+    await core.createAssignments("default", "数学第三章习题1-20明天交");
+    core.importDocument("default", "高三数学错题笔记", "函数与导数：含参函数单调性讨论要先求导。");
+
+    const result = core.exportData();
+    expect(result.success).toBe(true);
+    const payload = result.data!["data"] as Record<string, unknown>;
+    expect(payload["documents:default"]).toBeTruthy();
+    expect(payload["assignments:default"]).toBeTruthy();
+    expect(JSON.stringify(payload)).not.toContain("sk-should-never-be-exported");
+    expect(String(result.data!["filename"])).toContain("synapse-export-");
   });
 });
 

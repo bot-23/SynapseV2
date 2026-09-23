@@ -6,6 +6,7 @@
 import type { Clock } from "../ports/index";
 import { systemClock } from "../ports/index";
 import type {
+  AssignmentItem,
   ConfirmedSubject,
   LongTermPlan,
   PlanVersionRecord,
@@ -343,6 +344,8 @@ export class RuntimeStore {
       request_echo: payload["request_echo"] ?? {},
       memories: payload["memories"] ?? [],
       planning_mode: String(payload["planning_mode"] ?? "free"),
+      // v2：作业澄清会话要能跨进程恢复（壳重启后重新拉起 pending 时仍拿得到原文）
+      assignment_text: String(payload["assignment_text"] ?? ""),
       created_at: this.now(),
     };
     this.kv.set("clarifications", sessions);
@@ -666,6 +669,14 @@ export class RuntimeStore {
         file_name: row["file_name"],
         excerpt: row["excerpt"],
         chunks: row["chunks"] ?? [],
+        // F1 结构化元数据：旧数据没有这些字段，在读取侧补默认值即可，不需要迁移脚本。
+        subject: String(row["subject"] ?? ""),
+        tags: Array.isArray(row["tags"]) ? row["tags"] : [],
+        source: String(row["source"] ?? "upload"),
+        created_at: String(row["created_at"] ?? ""),
+        char_count: Math.max(0, Math.trunc(Number(row["char_count"] ?? 0))),
+        kg_node_ids: Array.isArray(row["kg_node_ids"]) ? row["kg_node_ids"] : [],
+        review_card_ids: Array.isArray(row["review_card_ids"]) ? row["review_card_ids"] : [],
         updated_at: row["updated_at"] ?? "",
       }))
       .sort((a, b) => {
@@ -701,10 +712,86 @@ export class RuntimeStore {
       existing["file_name"] = String(doc["file_name"] || "未命名资料").slice(0, 512);
       existing["excerpt"] = String(doc["excerpt"] || "").slice(0, 4096);
       existing["chunks"] = doc["chunks"] ?? [];
+      // F1 元数据：未传入时保留原值（新建时落到默认值），因此旧调用点行为不变。
+      existing["subject"] = String(doc["subject"] ?? existing["subject"] ?? "").slice(0, 64);
+      if (Array.isArray(doc["tags"])) {
+        existing["tags"] = this._clean_tags(doc["tags"]);
+      } else if (!Array.isArray(existing["tags"])) {
+        existing["tags"] = [];
+      }
+      existing["source"] = String(doc["source"] ?? existing["source"] ?? "upload");
+      existing["char_count"] = Math.max(
+        0,
+        Math.trunc(Number(doc["char_count"] ?? existing["char_count"] ?? 0)),
+      );
+      if (!Array.isArray(existing["kg_node_ids"])) {
+        existing["kg_node_ids"] = [];
+      }
+      if (!Array.isArray(existing["review_card_ids"])) {
+        existing["review_card_ids"] = [];
+      }
+      if (!existing["created_at"]) {
+        existing["created_at"] = this.now();
+      }
       existing["updated_at"] = this.now();
     }
     this.kv.set(key, rows);
     return this.get_documents(userId);
+  }
+
+  /**
+   * 局部更新资料元数据（改标题/科目/标签，或回填图谱节点与复习卡 ID）。
+   *
+   * 单独一个方法而不是复用 save_documents：后者是整份 upsert，
+   * 不传 excerpt/chunks 会把正文清空，改单个字段很危险。
+   */
+  update_document(
+    userId: string,
+    docId: string,
+    patch: {
+      file_name?: string;
+      subject?: string;
+      tags?: string[];
+      kg_node_ids?: string[];
+      review_card_ids?: string[];
+    },
+  ): Record<string, unknown>[] {
+    const key = `documents:${userId}`;
+    const rows = this.readJson<Array<Record<string, unknown>>>(key, []).map((row) => ({ ...row }));
+    const target = rows.find((row) => String(row["doc_id"] ?? "") === docId);
+    if (!target) {
+      return this.get_documents(userId);
+    }
+    if (patch.file_name !== undefined) {
+      target["file_name"] = String(patch.file_name || "未命名资料").slice(0, 512);
+    }
+    if (patch.subject !== undefined) {
+      target["subject"] = String(patch.subject).slice(0, 64);
+    }
+    if (patch.tags !== undefined) {
+      target["tags"] = this._clean_tags(patch.tags);
+    }
+    if (patch.kg_node_ids !== undefined) {
+      target["kg_node_ids"] = [...new Set(patch.kg_node_ids.map((id) => String(id)).filter(Boolean))];
+    }
+    if (patch.review_card_ids !== undefined) {
+      target["review_card_ids"] = [
+        ...new Set(patch.review_card_ids.map((id) => String(id)).filter(Boolean)),
+      ];
+    }
+    if (!target["created_at"]) {
+      target["created_at"] = this.now();
+    }
+    target["updated_at"] = this.now();
+    this.kv.set(key, rows);
+    return this.get_documents(userId);
+  }
+
+  private _clean_tags(tags: unknown[]): string[] {
+    return tags
+      .map((tag) => String(tag ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 12);
   }
 
   /** 删除一份资料（save_documents 是 upsert 语义，删除需要单独走这里）。 */
@@ -895,6 +982,107 @@ export class RuntimeStore {
   }
 
   // ------------------------------------------------------------------
+  // 作业式计划
+  // ------------------------------------------------------------------
+
+  /** 读取作业清单。与资料一样在读取侧补默认值，旧数据（乃至手工写入的残缺行）不会报错。 */
+  get_assignments(userId: string): AssignmentItem[] {
+    const rows = this.readJson<Array<Record<string, unknown>>>(`assignments:${userId}`, []);
+    return rows
+      .map((row) => ({
+        id: String(row["id"] ?? ""),
+        subject: String(row["subject"] ?? ""),
+        title: String(row["title"] ?? ""),
+        quantity: Math.max(0, Math.trunc(Number(row["quantity"] ?? 0))),
+        unit: String(row["unit"] ?? ""),
+        due_date: String(row["due_date"] ?? ""),
+        estimated_minutes: Math.max(0, Math.trunc(Number(row["estimated_minutes"] ?? 0))),
+        status: (row["status"] === "done" || row["status"] === "overdue"
+          ? row["status"]
+          : "pending") as AssignmentItem["status"],
+        done_at: String(row["done_at"] ?? ""),
+        created_at: String(row["created_at"] ?? ""),
+        source_text: String(row["source_text"] ?? ""),
+        review_card_ids: Array.isArray(row["review_card_ids"])
+          ? (row["review_card_ids"] as unknown[]).map((id) => String(id))
+          : [],
+        plan_id: String(row["plan_id"] ?? ""),
+        plan_version:
+          row["plan_version"] === null || row["plan_version"] === undefined
+            ? null
+            : Math.trunc(Number(row["plan_version"])),
+        original_due_date: String(row["original_due_date"] ?? ""),
+        rescheduled_at: String(row["rescheduled_at"] ?? ""),
+      }))
+      .filter((row) => row.id && row.title);
+  }
+
+  save_assignments(userId: string, items: AssignmentItem[]): AssignmentItem[] {
+    this.kv.set(
+      `assignments:${userId}`,
+      items.map((item) => ({ ...item })),
+    );
+    return this.get_assignments(userId);
+  }
+
+  /** 局部更新一条作业（打卡 / 重排 / 抽卡回写）。 */
+  update_assignment(
+    userId: string,
+    assignmentId: string,
+    patch: Partial<AssignmentItem>,
+  ): AssignmentItem[] {
+    const items = this.get_assignments(userId);
+    const next = items.map((item) =>
+      item.id === assignmentId ? { ...item, ...patch, id: item.id } : item,
+    );
+    return this.save_assignments(userId, next);
+  }
+
+  // ------------------------------------------------------------------
+  // 数据导出
+  // ------------------------------------------------------------------
+
+  /**
+   * 导出该用户的全部本地数据（数据主权归用户：随时能把自己的数据拿走）。
+   * API Key 会被剔除 —— 导出文件不该成为凭据泄露的新渠道。
+   */
+  export_user_data(userId = "default"): Record<string, unknown> {
+    const uid = userId || "default";
+    const data: Record<string, unknown> = {};
+    for (const key of [
+      `progress:${uid}`,
+      `plans:${uid}`,
+      `plan_versions:${uid}`,
+      `subjects:${uid}`,
+      `long_plan:${uid}`,
+      `today:${uid}`,
+      `review:${uid}`,
+      `documents:${uid}`,
+      `assignments:${uid}`,
+      `timetable:${uid}`,
+    ]) {
+      data[key] = this.kv.get(key) ?? null;
+    }
+
+    const conversations = this.list_conversations(uid);
+    data[`conversations:${uid}`] = conversations;
+    data["messages"] = Object.fromEntries(
+      conversations.map((conversation) => [conversation.id, this.get_messages(conversation.id)]),
+    );
+
+    const profiles = this.readJson<Record<string, Record<string, unknown>>>(KEY_PROFILE, {});
+    const profileRow = { ...(profiles[uid] ?? {}) };
+    delete profileRow["api_key"];
+    data[`profile:${uid}`] = profileRow;
+
+    data[KEY_KG_NODES] = this.kgNodes();
+    data[KEY_KG_EDGES] = this.kgEdges();
+    data["assessments"] = this.readJson<unknown[]>("assessments:default", []);
+    data["exported_at"] = this.now();
+    return data;
+  }
+
+  // ------------------------------------------------------------------
   // 清空
   // ------------------------------------------------------------------
 
@@ -916,6 +1104,7 @@ export class RuntimeStore {
     this.kv.delete(`today:${userId}`);
     this.kv.delete(`review:${userId}`);
     this.kv.delete(`documents:${userId}`);
+    this.kv.delete(`assignments:${userId}`);
     // 当前产品是单本地用户；清空用户数据时移除资料生成的图谱，只保留内置知识。
     this.kv.set(KEY_KG_NODES, SEED_KG_NODES);
     this.kv.set(KEY_KG_EDGES, SEED_KG_EDGES);

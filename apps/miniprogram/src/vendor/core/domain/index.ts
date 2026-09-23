@@ -21,15 +21,32 @@ export {
   type ParsedDocumentHit,
 } from "./contextBudget";
 export {
+  DEFAULT_PERIOD_SCHEDULE,
   apply_timetable_to_payload,
   build_timetable_context,
+  is_entry_active_in_week,
   list_timetable_subjects,
   parse_timetable_text,
   parseWeekday,
   summarize_day_busy,
   type ParseTimetableOptions,
+  type PeriodTime,
 } from "./timetable";
 export { fit_tasks_to_minutes } from "./planFit";
+export { detect_document_subject, detect_subject_from_text, infer_subject_from_text } from "./subjectInfer";
+export {
+  ASSIGNMENT_HORIZON_DAYS,
+  assignment_countdown,
+  build_assignment_schedule,
+  estimate_assignment_minutes,
+  is_assignment_overdue,
+  looks_like_assignment,
+  parse_assignment_due,
+  parse_assignment_items,
+  refresh_assignment_statuses,
+  reschedule_overdue_items,
+  type AssignmentDraft,
+} from "./assignment";
 export { pyRound } from "./pyCompat";
 export { add_days, days_between, to_date } from "./dateMath";
 export {
