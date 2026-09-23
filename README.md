@@ -8,7 +8,7 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 
 ## 当前状态
 
-这是一个**可运行的微信小程序版本**，核心学习规划链路、离线规则模式、本地资料检索、课程表避让、三层计划和复习闭环已经落地。Web、桌面和 Android 仍只有架构规划，没有对应应用壳。
+这是**已交付微信小程序与浏览器 Web 两个应用壳**的版本，核心学习规划链路、离线规则模式、本地资料检索、课程表避让、三层计划和复习闭环在两大平台均已落地。桌面和 Android 仍只有架构规划，没有对应应用壳。
 
 状态口径：
 
@@ -21,10 +21,11 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 
 最近一次验证结果：
 
-- core 单元测试、黄金样本与边界测试：**69/69 通过**
-- core 与小程序 TypeScript 类型检查：通过
-- vendor 导入边界：通过（core 对外导出 141 个，检查 31 个壳文件）
-- H5 预览构建与渲染：通过，控制台无运行时错误
+- core 单元测试、黄金样本、边界与压力测试：**80/80 通过**
+- core、小程序与 Web TypeScript 类型检查：通过
+- vendor 导入边界：通过（core 对外导出 141 个，检查 33 个壳文件）
+- Web Playwright 端到端测试：**13/13 通过**
+- Web 生产构建、微信小程序生产构建：通过
 - 真实中文 TXT：导入后切出 1 段，能在离线计划的消息、理由和 Day 1 任务中引用资料名
 
 > 自动化测试覆盖 core 行为，不等于所有微信原生交互都已真机验收。`chooseMessageFile`、网络合法域名、云开发 AI 等仍受微信运行环境影响。
@@ -54,6 +55,10 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 | 复习队列 | ✅ | 完成学习任务自动入队；按 SM-2 安排到期复习，也可手动添加知识点 |
 | 课程表 | ✅ | 支持粘贴文本解析、手动录入、逐条校正；计划按空闲时间压缩任务量 |
 | 资料库 | ✅ | 支持粘贴文本、从微信聊天记录选择 `.txt`、2MB 限制、中文解码、切片与删除 |
+| 资料自动构图 | 🧪 | 每份资料可显式构建图谱；有 Key 时由模型抽取，无 Key/调用失败时降级为本地 bigram 高频词 |
+| 图谱可视化 | ✅ | Web 使用 SVG、小程序使用 Canvas 环形布局；支持节点分类着色与点击查看说明 |
+| 资料转复习 | 🧪 | 构图后将新知识点去重加入次日 SM-2 复习队列 |
+| 演示数据 | 🧪 | 开发/体验环境一键载入数学错题资料、三天计划、打卡、到期复习与资料图谱 |
 | 本地检索 | ✅ | BM25 + 中文相邻双字索引；资料、画像、执行记录、课程表、知识图谱统一进入上下文预算 |
 | 资料证据 | ✅ | 命中资料后，计划消息、理由、首个任务和计划卡片显示资料名与来源摘要 |
 | 教学答疑检索 | ✅ | 教学问题命中资料时，将文件名和片段加入提示词；没有资料时保持旧提示词 |
@@ -61,20 +66,35 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 | 用户画像 | ✅ | 本地保存姓名、年级；姓名首次设定后锁定 |
 | 科目注册表 | ✅ | 对话识别出的科目跨会话保留，识别错误可在“我的”页删除 |
 | 数据清理 | ✅ | 一键清空画像、计划、进度、课程表、资料与 API Key |
-| 知识图谱 | ✅ | 内置 9 个节点、10 条边，为计划提供相关节点和学习路径建议 |
+| 知识图谱 | ✅ | 内置 9 个节点、10 条边，并可从个人资料增量生长，为计划提供相关节点和学习路径建议 |
 
-### 页面清单
+### 小程序页面清单
 
 | 页面 | 路由 | 类型 | 能力 |
 | --- | --- | --- | --- |
 | 首次引导 | `pages/onboarding/index` | 启动页 | Key 校验、跳过并使用本地规则模式 |
 | 对话 | `pages/chat/index` | Tab | 多轮对话、自由/积木模式、澄清卡片、计划卡片、AI 标识 |
 | 计划 | `pages/plan/index` | Tab | 今日、短期、长期、复习四个视图 |
-| 我的 | `pages/mine/index` | Tab | 画像、科目、Key、课程表、资料库、知识图谱、数据清理入口 |
+| 我的 | `pages/mine/index` | Tab | 画像、科目、Key、课程表、资料库、知识图谱、演示数据与数据清理入口 |
 | 历史会话 | `pages/conversations/index` | 二级页 | 新建、切换、长按删除会话 |
 | 课程表 | `pages/timetable/index` | 二级页 | 文本解析、手动录入、校正、保存 |
-| 资料库 | `pages/documents/index` | 二级页 | 粘贴或选择 TXT、查看切片摘要、删除 |
+| 资料库 | `pages/documents/index` | 二级页 | 粘贴或选择 TXT、查看切片摘要、构建图谱、删除 |
+| 知识图谱 | `pages/graph/index` | 二级页 | 环形可视化节点与关系、点击节点查看说明 |
 | 云开发 AI 自检 | `pages/cloudcheck/index` | 实验页 | 探测 provider/model、思考模式、工具调用、JSON mode、流式输出 |
+
+### Web 页面清单
+
+Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供主导航，窄屏（≤760px）自动改为固定底部导航。
+
+| 视图 | 组件 | 能力 |
+| --- | --- | --- |
+| 首次引导 | `pages/Onboarding.tsx` | 填写姓名与年级，或跳过直接进入本地规则模式 |
+| 对话 | `pages/Chat.tsx` | 多轮会话、自由/积木模式、澄清卡片、计划卡片、AI 标识 |
+| 计划 | `pages/Plan.tsx` | 今日、短期、长期、复习四个视图 |
+| 我的 | `pages/Mine.tsx` | 画像、科目、Key、课程表、资料库入口、图谱入口、演示数据、清空数据 |
+| 资料库 | `pages/Documents.tsx` | 粘贴或选择 TXT（2MB 上限）、切片摘要、构建图谱、删除 |
+| 课程表 | `pages/Timetable.tsx` | 文本解析、手动录入、校正、保存 |
+| 知识图谱 | `pages/Graph.tsx` | SVG 环形布局、按分类着色、点击节点查看说明 |
 
 ### 已实现但有边界
 
@@ -109,12 +129,12 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 | 用户账号与登录 | ⏳ | 当前固定本地用户 `default`，没有微信登录、账号体系或多用户切换 |
 | 跨设备同步/云备份 | ⏳ | 全部业务数据仅在当前设备 KV 中 |
 | 数据导出/导入 | ⏳ | 没有 JSON/ZIP 备份恢复入口 |
-| Web 应用 | ⏳ | `apps/web` 尚未创建 |
+| Web 应用 | ✅ | `apps/web`：Vite + React 单页壳，复用 `@synapse/core`，localStorage 适配器、离线规则模式、资料/课程表/计划/复习均可用 |
 | 桌面应用 | ⏳ | Tauri 壳、文件系统 KV 适配器和旧 SQLite 迁移器尚未实现 |
 | Android 应用 | ⏳ | Tauri Mobile / Kotlin 薄壳均未实现 |
 | HTTP/SSE 服务端 | ⏳ | 协议可映射为 HTTP，但当前只有进程内调用，不提供服务器 |
 | 向量检索 | ⏳ | 没有 embedding 模型、向量库或语义召回 |
-| UI 自动化测试 | ⏳ | 当前测试集中在 core；页面交互主要靠类型检查和预览冒烟 |
+| Web UI 自动化测试 | 🧪 | Playwright e2e 共 13 条，覆盖引导/对话/计划/资料构图/图谱/演示数据/移动端导航/课程表/我的；微信原生交互仍需真机验收 |
 
 ---
 
@@ -199,9 +219,10 @@ npm run typecheck
 | --- | --- | --- | --- |
 | 语言 | TypeScript | ^5.6（strict） | 全仓库唯一语言 |
 | 包管理 | npm workspaces | — | monorepo，`packages/*` + `apps/*` |
-| 测试 | Vitest | ^3.0 | 69 个测试，含黄金样本回放 |
+| 测试 | Vitest | ^3.0 | 80 个测试，含黄金样本回放与压力测试 |
 | 核心 | 纯 TypeScript | — | `@synapse/core`，**零运行时依赖** |
 | 小程序壳 | Taro | 4.1.9 | React 18 + SCSS Modules，微信小程序为主 |
+| Web 壳 | Vite + React | ^5.4 / ^18 | `apps/web`，浏览器单页，直接复用 core |
 | UI | React | ^18 | 函数组件 + Hooks |
 | 状态 | Zustand | ^4.5 | 页面级状态 |
 | 工具库（壳） | dayjs / classnames | ^1.11 / ^2.5 | 仅壳内使用，不进 core |
@@ -227,15 +248,16 @@ SynapseNext/
 │       │   ├── ports/            # 端口定义：core 访问平台的唯一出口
 │       │   ├── providers/        # LLM / 检索 / 日历 / 通知 适配器
 │       │   └── storage/          # KV 之上的运行时存储（含键空间）
-│       └── test/                 # 5 个测试文件，69 个用例
+│       └── test/                 # 6 个测试文件，80 个用例
 ├── apps/
-│   └── miniprogram/              # Taro 壳（当前唯一已交付的壳）
+│   ├── miniprogram/              # Taro 微信小程序壳
 │       └── src/
 │           ├── adapters/         # 端口实现：HttpTransport / KvStore
 │           ├── vendor/core/      # core 的同步副本（脚本生成，勿手改）
-│           ├── pages/            # 8 个页面（3 个 Tab + 5 个启动/二级/实验页）
+│           ├── pages/            # 9 个页面（3 个 Tab + 6 个启动/二级/实验页）
 │           ├── components/       # 计划、积木计划、澄清卡片
 │           └── services/         # 壳侧封装，对接 vendor/core
+│   └── web/                      # Vite + React Web 壳
 ├── baseline/                     # 旧 Python 行为的冻结基线（黄金样本）
 └── scripts/                      # sync-core-to-miniprogram / check-vendor-imports
 ```
@@ -331,7 +353,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 | `progress:{userId}` | 任务打卡进度 |
 | `documents:{userId}` | 导入的资料 |
 | `timetable:{userId}` | 课程表 |
-| `kg:nodes` / `kg:edges` | 知识图谱（9 节点 / 10 边） |
+| `kg:nodes` / `kg:edges` | 知识图谱（9 个内置节点 + 资料构建的增量节点） |
 
 ---
 
@@ -347,12 +369,24 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 因此不需要向量库、不需要 embedding 服务、不需要服务器，整个应用可以是纯离线可用的本地程序（模型调用除外）。
 
-### 两个离线算法
+### 三个离线算法
 
 | 算法 | 位置 | 说明 |
 | --- | --- | --- |
 | **SM-2 间隔重复** | [review.ts](packages/core/src/domain/review.ts) | 初始 2.5 难度系数、下限 1.3；间隔 1 天 → 6 天 → ×ease，上限 180 天；打卡完成自动入复习队列 |
 | **BM25 检索** | [bm25.ts](packages/core/src/domain/bm25.ts) | `k1=1.5`、`b=0.75`，中文按相邻双字（bigram）切分，零依赖倒排索引 |
+| **资料图谱构建** | [kgBuilder.ts](packages/core/src/application/kgBuilder.ts) | 模型抽取结构化节点和关系；不可用时取高频 bigram top 5，按资料 ID 幂等写入 |
+
+### 资料 → 图谱 → 计划的闭环
+
+导入的资料不只用于检索，还能显式长成知识图谱，并被后续计划引用：
+
+1. **构图**：在资料库对某份资料点「构建图谱」→ 抽取知识点与关系，按 `doc_{资料ID前8位}_{序号}` 生成节点，并补一条 `document → topic` 的 `contains` 边。
+2. **降级**：没配 Key 或模型调用失败时，改用本地 bigram 高频词 top 5 作为 topic 节点，`description` 标注「离线规则抽取」，不阻断流程。
+3. **幂等**：节点按 `id`、边按 `(source_id, target_id, relation)` 去重，同一资料重复构建不会产生重复内容。
+4. **入队**：构图产生的新 topic 会去重写入次日 SM-2 复习队列。
+5. **复用**：`KgRetrievalProvider.search()` 无需改动即可命中新节点，生成计划时提示词会同时带上「图谱学习路径」与「资料原文片段」双证据。
+6. **可视化**：小程序用 Canvas、Web 用 SVG 渲染环形图谱，节点按分类着色，可点击查看说明。
 
 另有一组 **Python 语义兼容函数**（[pyCompat.ts](packages/core/src/domain/pyCompat.ts)）：`pyRound`（银行家舍入）、`floorDiv`、`pyTruncInt` —— 用于让 TS 结果与旧 Python 逐位对齐。
 
@@ -368,8 +402,8 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 | 门禁 | 命令 | 现状 |
 | --- | --- | --- |
-| 单元 + 回放测试 | `npm test` | 69/69 通过 |
-| 类型检查 | `npm run typecheck` | 通过（core + 小程序壳） |
+| 单元 + 回放 + 压力测试 | `npm test` | 80/80 通过 |
+| 类型检查 | `npm run typecheck` | 通过（core + 小程序壳 + Web） |
 | core 边界规则 | 含在 `npm test` | 通过 |
 | vendor 边界校验 | `npm run check:vendor` | 通过（对外名 141 个） |
 
@@ -395,15 +429,22 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 ```bash
 npm install                           # 拉依赖（node_modules 不入库，clone 后必跑）
-npm test                              # 全仓测试（当前 69 个）
-npm run typecheck                     # 全仓类型检查（core + 小程序壳）
+npm test                              # 全仓测试（当前 80 个）
+npm run test:stress --workspace @synapse/core # 单独运行 core 压力测试
+npm run typecheck                     # 全仓类型检查（core + 小程序壳 + Web）
 npm run sync:core                     # core → 小程序 vendor（增量覆盖 + 校验）
 npm run check:vendor                  # 只做 vendor 边界校验
+npm run dev    --workspace @synapse/web   # 起 Web 开发服务器（默认 http://localhost:5180）
+npm run build  --workspace @synapse/web   # Web 生产构建（输出 apps/web/dist）
+npm run preview --workspace @synapse/web  # 本地预览构建产物
+npm run e2e --workspace @synapse/web      # Web 端到端冒烟测试（Playwright/Chromium，先起 dev server）
 ```
 
 `sync:core` 是按需覆盖：内容没变不重写文件，避免预览构建产物清单错乱导致 `ChunkLoadError`。
 
 **`apps/miniprogram/src/vendor/core/` 是生成物，不要手改** —— 改 `packages/core` 后跑 `npm run sync:core`。
+
+Web 端（`apps/web`）直接进程内复用 `@synapse/core`，浏览器用 `localStorage` 适配 KV、`fetch` 适配 HTTP、`crypto.randomUUID` 适配 ID。没配 DeepSeek Key 时同样走 `offlinePlanFallback` 本地规则模式。
 
 ---
 
@@ -411,8 +452,8 @@ npm run check:vendor                  # 只做 vendor 边界校验
 
 | 平台 | 状态 |
 | --- | --- |
-| 微信小程序（Taro） | 已交付主链路：引导 / 对话 / 计划（今日·短期·长期·复习）/ 我的 / 历史会话 / 课程表 / TXT 资料库；云开发 AI 仅自检 |
-| Web | 待做 |
+| 微信小程序（Taro） | 已交付主链路及资料构图 / Canvas 图谱 / 演示数据；微信原生交互仍需真机验收，云开发 AI 仅自检 |
+| Web（Vite + React） | 已交付主链路及资料构图 / SVG 图谱 / 演示数据，复用同一份 `@synapse/core`，13 条 e2e 通过 |
 | 桌面（Tauri） | 待做 |
 | Android | 待做 |
 

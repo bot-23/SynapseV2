@@ -726,6 +726,10 @@ export class StudyPlanWorkflowService {
       enrichedPayload.learning_goal,
     );
     this._persist_learning_goal(refreshedPayload);
+    // 澄清路径同样要把本轮提到的科目并入「已确认科目」，
+    // 否则「我要学高等数学和大学物理」走澄清后，我的科目列表仍是空的。
+    // 这里不触发中途追加分支：澄清后是本轮正式生成，而非在已有计划上增量补排。
+    this._merge_confirmed_subjects(refreshedPayload.user_id, this._collect_subject_candidates(refreshedPayload));
     const retrievedContext = this._build_hybrid_context(refreshedPayload);
     if (session.planning_mode === "blocks") {
       const blockPlan = this._build_block_plan(refreshedPayload, retrievedContext);

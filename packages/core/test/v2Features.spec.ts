@@ -44,6 +44,8 @@ import type {
 import type { StudyPlanRequest, TimetableEntry } from "../src/protocol/study.js";
 import type { StudyPilotRunRequest } from "../src/protocol/frontend.js";
 import { buildTeachPrompt } from "../src/application/prompts.js";
+import { KgBuilder } from "../src/application/kgBuilder.js";
+import { KgRetrievalProvider } from "../src/providers/kgRetrieval.js";
 
 let idCounter = 0;
 const testIdGen = { next: () => `id-${++idCounter}` };
@@ -99,6 +101,36 @@ class RecordingLlm implements LlmProvider {
 
   async *streamText(prompt: string): AsyncIterable<string> {
     yield prompt;
+  }
+}
+
+class KgMockLlm extends RecordingLlm {
+  override async generateJson(): Promise<Record<string, unknown>> {
+    return {
+      nodes: [
+        {
+          name: "夹逼定理",
+          category: "topic",
+          subject: "高等数学",
+          aliases: ["夹逼准则"],
+          description: "利用上下界极限求目标极限",
+        },
+        {
+          name: "函数极限",
+          category: "topic",
+          subject: "高等数学",
+          aliases: [],
+          description: "夹逼定理的前置知识",
+        },
+      ],
+      edges: [
+        {
+          source_name: "函数极限",
+          target_name: "夹逼定理",
+          relation: "prerequisite_of",
+        },
+      ],
+    };
   }
 }
 
@@ -1124,6 +1156,75 @@ describe("core v2：资料库（粘贴导入 + BM25）", () => {
     const removed = core.removeDocument("default", String(doc["doc_id"]));
     expect(removed.success).toBe(true);
     expect((core.listDocuments().data as Record<string, unknown>)["total"]).toBe(0);
+  });
+});
+
+describe("core v2：资料自动构建知识图谱", () => {
+  it("模型抽取后可检索新节点，重复构建不产生重复节点", async () => {
+    const core = createSynapseCore({ idGen: testIdGen });
+    const imported = core.importDocument(
+      "default",
+      "高数错题笔记",
+      "函数极限是夹逼定理的基础。夹逼定理通过上下界极限判断目标函数极限。",
+    );
+    expect(imported.success).toBe(true);
+    const documents = (core.listDocuments().data as Record<string, unknown>)["documents"] as Array<
+      Record<string, unknown>
+    >;
+    const docId = String(documents[0]!["doc_id"]);
+    const builder = new KgBuilder(core.store, new KgMockLlm());
+    const before = core.store.kgNodes().length;
+
+    const first = await builder.buildKgFromDocument(docId);
+    expect(first.added_nodes).toBe(3);
+    expect(core.store.kgNodes().length).toBe(before + 3);
+    expect(new KgRetrievalProvider(core.store).search("夹逼定理").join("\n")).toContain(
+      "夹逼定理",
+    );
+
+    const second = await builder.buildKgFromDocument(docId);
+    expect(second.added_nodes).toBe(0);
+    expect(second.added_edges).toBe(0);
+    expect(core.store.kgNodes().length).toBe(before + 3);
+  });
+
+  it("无 Key 时离线抽取知识点并加入明日复习队列", async () => {
+    const core = createSynapseCore({
+      idGen: testIdGen,
+      config: { offlinePlanFallback: true },
+    });
+    const imported = core.importDocument(
+      "default",
+      "物理错题",
+      "受力分析受力分析受力分析，牛顿定律牛顿定律，摩擦力摩擦力。",
+    );
+    const documents = (imported.data as Record<string, unknown>)["documents"] as Array<
+      Record<string, unknown>
+    >;
+    const docId = String(documents[0]!["doc_id"]);
+
+    const result = await core.buildKgFromDocument(docId);
+    const data = result.data;
+    expect(result.success).toBe(true);
+    expect(data?.used_fallback).toBe(true);
+    expect(Number(data?.added_nodes)).toBeGreaterThan(1);
+    expect(Number(data?.added_reviews)).toBeGreaterThan(0);
+    expect(core.store.get_reviews("default").length).toBe(Number(data?.added_reviews));
+  });
+
+  it("一键演示数据包含三天前计划、打卡、到期复习与资料图谱", async () => {
+    const core = createSynapseCore({
+      idGen: testIdGen,
+      clock: { nowIso: () => "2026-09-23T08:00:00.000Z" },
+      config: { offlinePlanFallback: true },
+    });
+    const result = await core.loadDemoData();
+
+    expect(result.success).toBe(true);
+    expect(core.store.get_plan("default")?.start_date).toBe("2026-09-20");
+    expect(Object.values(core.progress.get_task_progress("default")).filter(Boolean)).toHaveLength(2);
+    expect(core.listReviews().data?.due_count).toBeGreaterThanOrEqual(2);
+    expect(core.store.kgNodes().some((node) => node.id.startsWith("doc_demo-mat"))).toBe(true);
   });
 });
 

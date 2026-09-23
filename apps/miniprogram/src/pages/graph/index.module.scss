@@ -1,0 +1,88 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  padding: $spacing-md $page-padding 80rpx;
+}
+
+.summary,
+.detail {
+  padding: $spacing-lg;
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+}
+
+.title,
+.detailTitle {
+  display: block;
+  color: $color-text-primary;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+}
+
+.desc {
+  display: block;
+  margin-top: $spacing-xs;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  line-height: $line-height-normal;
+}
+
+.graphStage {
+  position: relative;
+  width: 670rpx;
+  height: 840rpx;
+  margin: $spacing-md auto;
+  overflow: hidden;
+  background: radial-gradient(circle at center, rgba(91, 108, 255, 0.1), $color-bg-card 60%);
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+}
+
+.canvas {
+  width: 670rpx;
+  height: 840rpx;
+}
+
+.node {
+  position: absolute;
+  display: flex;
+  width: 76rpx;
+  height: 76rpx;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx;
+  border: 4rpx solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 6rpx 18rpx rgba(52, 39, 112, 0.2);
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+}
+
+.nodeActive {
+  width: 88rpx;
+  height: 88rpx;
+  box-shadow: 0 8rpx 24rpx rgba(52, 39, 112, 0.36);
+}
+
+.nodeText {
+  color: #fff;
+  font-size: 16rpx;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.tags {
+  display: flex;
+  margin-top: $spacing-sm;
+}
+
+.tag {
+  margin-right: $spacing-sm;
+  padding: 4rpx 16rpx;
+  color: $color-primary;
+  font-size: $font-size-xs;
+  background: rgba(91, 108, 255, 0.08);
+  border-radius: $radius-button;
+}

@@ -374,6 +374,7 @@ export class RuntimeStore {
     weeklyPlan: Record<string, unknown>[] | null = null,
     blockPlan: Record<string, unknown> | null = null,
     changeSummary = "",
+    startDateOverride = "",
   ): SavedPlanMeta {
     const previous = this.readJson<{ version?: number; start_date?: string } | null>(
       `plans:${userId}`,
@@ -388,7 +389,7 @@ export class RuntimeStore {
       version,
       change_summary: changeSummary,
       updated_at: updatedAt,
-      start_date: this._resolve_start_date(previous?.start_date),
+      start_date: startDateOverride || this._resolve_start_date(previous?.start_date),
     };
     this.kv.set(`plans:${userId}`, plan);
 
@@ -683,7 +684,10 @@ export class RuntimeStore {
     if (!newDocuments.length) {
       return this.get_documents(userId);
     }
-    const rows = this.readJson<Array<Record<string, unknown>>>(key, []);
+    // 写前复制，避免 KV set 因容量等原因失败时污染存储中原对象。
+    const rows = this.readJson<Array<Record<string, unknown>>>(key, []).map((row) => ({
+      ...row,
+    }));
     for (const doc of newDocuments) {
       const docId = String(doc["doc_id"] || doc["file_name"] || "").trim();
       if (!docId) {
@@ -856,6 +860,40 @@ export class RuntimeStore {
     return this.readJson<KnowledgeEdge[]>(KEY_KG_EDGES, []);
   }
 
+  /** 按 id 去重追加图谱节点，返回实际新增数量。 */
+  addKgNodes(nodes: KnowledgeNode[]): number {
+    const current = this.kgNodes();
+    const ids = new Set(current.map((node) => node.id));
+    const additions = nodes.filter((node) => node.id && !ids.has(node.id));
+    if (!additions.length) {
+      return 0;
+    }
+    this.kv.set(KEY_KG_NODES, [...current, ...additions]);
+    return additions.length;
+  }
+
+  /** 按 source/target/relation 三元组去重追加图谱边，返回实际新增数量。 */
+  addKgEdges(edges: KnowledgeEdge[]): number {
+    const current = this.kgEdges();
+    const edgeKey = (edge: KnowledgeEdge) =>
+      `${edge.source_id}\u0000${edge.target_id}\u0000${edge.relation}`;
+    const keys = new Set(current.map(edgeKey));
+    const additions: KnowledgeEdge[] = [];
+    for (const edge of edges) {
+      const key = edgeKey(edge);
+      if (!edge.source_id || !edge.target_id || !edge.relation || keys.has(key)) {
+        continue;
+      }
+      keys.add(key);
+      additions.push(edge);
+    }
+    if (!additions.length) {
+      return 0;
+    }
+    this.kv.set(KEY_KG_EDGES, [...current, ...additions]);
+    return additions.length;
+  }
+
   // ------------------------------------------------------------------
   // 清空
   // ------------------------------------------------------------------
@@ -878,6 +916,9 @@ export class RuntimeStore {
     this.kv.delete(`today:${userId}`);
     this.kv.delete(`review:${userId}`);
     this.kv.delete(`documents:${userId}`);
+    // 当前产品是单本地用户；清空用户数据时移除资料生成的图谱，只保留内置知识。
+    this.kv.set(KEY_KG_NODES, SEED_KG_NODES);
+    this.kv.set(KEY_KG_EDGES, SEED_KG_EDGES);
     this.kv.delete(`timetable:${userId}`);
     this.kv.delete("clarifications");
     this.kv.delete("assessments:default");

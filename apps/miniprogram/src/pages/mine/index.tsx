@@ -17,6 +17,8 @@ export default function MinePage() {
   const [timetableCount, setTimetableCount] = useState(0)
   const [subjects, setSubjects] = useState<Array<{ name: string; source: string }>>([])
   const [documentCount, setDocumentCount] = useState(0)
+  const [documentNodeCount, setDocumentNodeCount] = useState(0)
+  const [loadingDemo, setLoadingDemo] = useState(false)
   const runtime = currentRuntimeMode()
 
   const load = () => {
@@ -34,6 +36,10 @@ export default function MinePage() {
 
     const kgRes = getCore().getGraphSummary()
     setKgSummary((kgRes.data ?? {}) as Record<string, unknown>)
+    const graphRes = getCore().getKnowledgeGraph()
+    setDocumentNodeCount(
+      Number((graphRes.data as Record<string, unknown> | null)?.['document_node_count'] ?? 0)
+    )
 
     const timetableRes = getCore().getTimetable(DEFAULT_USER_ID)
     setTimetableCount(Number((timetableRes.data as Record<string, unknown> | null)?.['total'] ?? 0))
@@ -117,6 +123,34 @@ export default function MinePage() {
     setFeedback('')
     load()
   }
+
+  const loadDemo = async () => {
+    if (loadingDemo) {
+      return
+    }
+    setLoadingDemo(true)
+    try {
+      const result = await getCore().loadDemoData(DEFAULT_USER_ID)
+      console.log('[Synapse] 载入演示数据', result.success, result.message)
+      Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
+      load()
+    } finally {
+      setLoadingDemo(false)
+    }
+  }
+
+  const accountInfo = (() => {
+    try {
+      return (Taro as any).getAccountInfoSync?.()
+    } catch {
+      return null
+    }
+  })()
+  const environmentVersion = String(accountInfo?.miniProgram?.envVersion ?? '')
+  const showDemo =
+    process.env.NODE_ENV === 'development' ||
+    environmentVersion === 'develop' ||
+    environmentVersion === 'trial'
 
   const nameLocked = Boolean(profile['display_name'])
 
@@ -257,11 +291,17 @@ export default function MinePage() {
         </Text>
       </View>
 
-      <View className={styles.card}>
-        <Text className={styles.cardTitle}>知识图谱</Text>
+      <View
+        className={styles.card}
+        onClick={() => Taro.navigateTo({ url: '/pages/graph/index' })}
+      >
+        <View className={styles.rowBetween}>
+          <Text className={styles.cardTitle}>知识图谱</Text>
+          <Text className={styles.rowArrow}>›</Text>
+        </View>
         <Text className={styles.cardDesc}>
-          本地内置 {String(kgSummary['node_count'] ?? '-')} 个节点、
-          {String(kgSummary['edge_count'] ?? '-')} 条边，用于给计划补充学习路径建议。
+          共 {String(kgSummary['node_count'] ?? '-')} 个节点、
+          {String(kgSummary['edge_count'] ?? '-')} 条边，其中 {documentNodeCount} 个来自资料。
         </Text>
       </View>
 
@@ -270,6 +310,15 @@ export default function MinePage() {
         <Text className={styles.cardDesc}>
           画像、计划、进度、课程表与 API Key 都只保存在这台设备上。
         </Text>
+        {showDemo && (
+          <Button
+            className={classnames(styles.demoButton, loadingDemo && styles.buttonDisabled)}
+            disabled={loadingDemo}
+            onClick={loadDemo}
+          >
+            {loadingDemo ? '正在载入…' : '载入演示数据'}
+          </Button>
+        )}
         <Button className={styles.dangerButton} onClick={clearAll}>
           清空全部数据
         </Button>

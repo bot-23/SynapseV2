@@ -1,0 +1,140 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Canvas, Text, View } from '@tarojs/components'
+import Taro, { useDidShow } from '@tarojs/taro'
+import { getCore } from '../../services/synapse'
+import styles from './index.module.scss'
+
+interface GraphNode {
+  id: string
+  name: string
+  category: string
+  subject: string
+  description: string
+}
+
+interface GraphEdge {
+  source_id: string
+  target_id: string
+  relation: string
+}
+
+const WIDTH = 335
+const HEIGHT = 420
+const COLORS: Record<string, string> = {
+  course: '#5b6cff',
+  topic: '#2f80ed',
+  strategy: '#d97706',
+  task: '#059669',
+  document: '#db2777'
+}
+
+export default function GraphPage() {
+  const [nodes, setNodes] = useState<GraphNode[]>([])
+  const [edges, setEdges] = useState<GraphEdge[]>([])
+  const [selectedId, setSelectedId] = useState('')
+
+  const positions = useMemo(() => {
+    const result = new Map<string, { x: number; y: number }>()
+    const courseNodes = nodes.filter((node) => node.category === 'course')
+    const outerNodes = nodes.filter((node) => node.category !== 'course')
+    courseNodes.forEach((node, index) => {
+      const angle = (Math.PI * 2 * index) / Math.max(1, courseNodes.length)
+      result.set(node.id, {
+        x: WIDTH / 2 + Math.cos(angle) * Math.min(36, courseNodes.length * 14),
+        y: HEIGHT / 2 + Math.sin(angle) * Math.min(36, courseNodes.length * 14)
+      })
+    })
+    outerNodes.forEach((node, index) => {
+      const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(1, outerNodes.length)
+      const radius = outerNodes.length > 18 && index % 2 ? 155 : 125
+      result.set(node.id, {
+        x: WIDTH / 2 + Math.cos(angle) * radius,
+        y: HEIGHT / 2 + Math.sin(angle) * radius
+      })
+    })
+    return result
+  }, [nodes])
+
+  const load = () => {
+    const result = getCore().getKnowledgeGraph()
+    const data = (result.data ?? {}) as Record<string, unknown>
+    const nextNodes = (data['nodes'] ?? []) as GraphNode[]
+    setNodes(nextNodes)
+    setEdges((data['edges'] ?? []) as GraphEdge[])
+    setSelectedId((current) => current || nextNodes[0]?.id || '')
+  }
+
+  useDidShow(load)
+
+  useEffect(() => {
+    if (!nodes.length) {
+      return
+    }
+    const context = Taro.createCanvasContext('knowledge-graph')
+    context.setStrokeStyle('#d7d1e8')
+    context.setLineWidth(1)
+    context.setFillStyle('#86909c')
+    context.setFontSize(7)
+    edges.forEach((edge) => {
+      const source = positions.get(edge.source_id)
+      const target = positions.get(edge.target_id)
+      if (!source || !target) {
+        return
+      }
+      context.beginPath()
+      context.moveTo(source.x, source.y)
+      context.lineTo(target.x, target.y)
+      context.stroke()
+      context.fillText(edge.relation, (source.x + target.x) / 2, (source.y + target.y) / 2 - 3)
+    })
+    context.draw()
+  }, [edges, nodes, positions])
+
+  const selected = nodes.find((node) => node.id === selectedId)
+
+  return (
+    <View className={styles.page}>
+      <View className={styles.summary}>
+        <Text className={styles.title}>从你的资料里生长的学习路径</Text>
+        <Text className={styles.desc}>{nodes.length} 个节点 · {edges.length} 条关系</Text>
+      </View>
+
+      <View className={styles.graphStage}>
+        <Canvas canvasId="knowledge-graph" className={styles.canvas} />
+        {nodes.map((node) => {
+          const point = positions.get(node.id)
+          if (!point) {
+            return null
+          }
+          return (
+            <View
+              key={node.id}
+              className={`${styles.node} ${selectedId === node.id ? styles.nodeActive : ''}`}
+              style={{
+                left: `${(point.x / WIDTH) * 100}%`,
+                top: `${(point.y / HEIGHT) * 100}%`,
+                backgroundColor: COLORS[node.category] || '#64748b'
+              }}
+              onClick={() => setSelectedId(node.id)}
+            >
+              <Text className={styles.nodeText}>
+                {node.name.length > 6 ? `${node.name.slice(0, 6)}…` : node.name}
+              </Text>
+            </View>
+          )
+        })}
+      </View>
+
+      {!!selected && (
+        <View className={styles.detail}>
+          <Text className={styles.detailTitle}>{selected.name}</Text>
+          <View className={styles.tags}>
+            <Text className={styles.tag}>{selected.category}</Text>
+            <Text className={styles.tag}>{selected.subject || '未分类'}</Text>
+          </View>
+          <Text className={styles.desc}>{selected.description || '暂无说明'}</Text>
+        </View>
+      )}
+    </View>
+  )
+}

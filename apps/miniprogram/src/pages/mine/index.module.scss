@@ -212,6 +212,19 @@
   }
 }
 
+.demoButton {
+  @include button-reset;
+  width: 100%;
+  height: $button-height-md;
+  margin-top: $spacing-md;
+  color: $color-primary;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  background: rgba(91, 108, 255, 0.08);
+  border: 1rpx solid rgba(91, 108, 255, 0.24);
+  border-radius: $radius-button;
+}
+
 .bottomSpacer {
   height: 120rpx;
 }

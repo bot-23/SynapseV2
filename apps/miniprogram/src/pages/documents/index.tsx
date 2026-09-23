@@ -17,6 +17,7 @@ export default function DocumentsPage() {
   const [name, setName] = useState('')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [buildingDocId, setBuildingDocId] = useState('')
 
   const load = () => {
     const result = getCore().listDocuments(DEFAULT_USER_ID)
@@ -119,6 +120,20 @@ export default function DocumentsPage() {
     load()
   }
 
+  const buildGraph = async (doc: DocumentView) => {
+    if (buildingDocId) {
+      return
+    }
+    setBuildingDocId(doc.doc_id)
+    try {
+      const result = await getCore().buildKgFromDocument(doc.doc_id, DEFAULT_USER_ID)
+      console.log('[Synapse] 资料构建图谱', doc.doc_id, result.success, result.message)
+      Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
+    } finally {
+      setBuildingDocId('')
+    }
+  }
+
   return (
     <View className={styles.page}>
       <View className={styles.card}>
@@ -169,8 +184,18 @@ export default function DocumentsPage() {
               <Text className={styles.docMeta}>{doc.chunk_count} 个片段</Text>
               {!!doc.excerpt && <Text className={styles.docExcerpt}>{doc.excerpt}</Text>}
             </View>
-            <View className={styles.docRemove} onClick={() => removeDoc(doc)}>
-              <Text className={styles.docRemoveText}>删除</Text>
+            <View className={styles.docActions}>
+              <View
+                className={classnames(styles.docBuild, buildingDocId && styles.buttonDisabled)}
+                onClick={() => buildGraph(doc)}
+              >
+                <Text className={styles.docBuildText}>
+                  {buildingDocId === doc.doc_id ? '构建中…' : '构建图谱'}
+                </Text>
+              </View>
+              <View className={styles.docRemove} onClick={() => removeDoc(doc)}>
+                <Text className={styles.docRemoveText}>删除</Text>
+              </View>
             </View>
           </View>
         ))}

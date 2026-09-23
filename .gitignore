@@ -19,6 +19,16 @@ apps/miniprogram/.swc/
 # 日志与临时文件
 *.log
 
+# 编辑器本地配置
+.vscode/
+
+# Web e2e 运行产物（Playwright 的 trace / 截图 / 报告）
+apps/web/e2e/results/
+apps/web/test-results/
+apps/web/playwright-report/
+
 # 本地验收材料
 /trae-tasks.md
 /高三数学错题笔记.txt
+/Trae_冲刺任务书.md
+/SynapseV2_测试用例集.md

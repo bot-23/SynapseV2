@@ -7,6 +7,7 @@ export default defineAppConfig({
     'pages/conversations/index',
     'pages/timetable/index',
     'pages/documents/index',
+    'pages/graph/index',
     'pages/cloudcheck/index'
   ],
   window: {

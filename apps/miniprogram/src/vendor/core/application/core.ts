@@ -27,9 +27,13 @@ import {
   parse_timetable_text,
   summarize_day_busy,
 } from "../domain/timetable";
-import { REVIEW_ITEM_KEY_PREFIX, build_today_items } from "../domain/todayPlan";
+import {
+  REVIEW_ITEM_KEY_PREFIX,
+  build_today_items,
+  plan_task_key,
+} from "../domain/todayPlan";
 import { complete_milestone } from "../domain/longPlan";
-import { to_date } from "../domain/dateMath";
+import { add_days, to_date } from "../domain/dateMath";
 import {
   apply_sm2,
   create_review_item,
@@ -62,6 +66,7 @@ import { extract_attachments, type IncomingFile } from "./fileExtract";
 import { ProgressService } from "./progress";
 import { SettingsService } from "./settings";
 import { StudyPlanWorkflowService } from "./workflow";
+import { KgBuilder, type KgBuildResult } from "./kgBuilder";
 
 export interface SynapseCoreOptions {
   kv?: KvStore;
@@ -79,6 +84,7 @@ export class SynapseCore {
   readonly progress: ProgressService;
   readonly conversations: ConversationService;
   readonly settings: SettingsService;
+  readonly kgBuilder: KgBuilder;
 
   private readonly http?: HttpTransport;
   private readonly stream?: StreamTransport;
@@ -97,8 +103,9 @@ export class SynapseCore {
     this.fileExtractor = options.fileExtractor;
     this.providerConfig = { ...DEFAULT_PROVIDER_CONFIG, ...options.config };
 
+    const providers = this._buildProviders();
     this.workflow = new StudyPlanWorkflowService({
-      providers: this._buildProviders(),
+      providers,
       store: this.store,
       idGen: this.idGen,
       clock,
@@ -106,6 +113,7 @@ export class SynapseCore {
     this.progress = new ProgressService(this.store);
     this.conversations = new ConversationService(this.store);
     this.settings = new SettingsService(this.store);
+    this.kgBuilder = new KgBuilder(this.store, providers.llm);
   }
 
   private _buildProviders(): ProviderBundle {
@@ -349,6 +357,50 @@ export class SynapseCore {
 
   getGraphSummary(): ApiResponse<Record<string, unknown>> {
     return apiOk(this.workflow.get_graph_summary(), "knowledge graph summary");
+  }
+
+  getKnowledgeGraph(): ApiResponse<Record<string, unknown>> {
+    const nodes = this.store.kgNodes();
+    return apiOk({
+      nodes,
+      edges: this.store.kgEdges(),
+      document_node_count: nodes.filter((node) => node.id.startsWith("doc_")).length,
+    });
+  }
+
+  async buildKgFromDocument(
+    docId: string,
+    userId = "default",
+  ): Promise<ApiResponse<KgBuildResult>> {
+    try {
+      const result = await this.kgBuilder.buildKgFromDocument(docId, userId);
+      const reviews = this.store.get_reviews(userId);
+      const knownKeys = new Set(reviews.map((item) => item.key));
+      const additions = result.topic_nodes.flatMap((node) => {
+        const key = review_key(node.subject, node.name);
+        if (knownKeys.has(key)) {
+          return [];
+        }
+        knownKeys.add(key);
+        return [
+          create_review_item({
+            id: this.idGen.next(),
+            subject: node.subject,
+            topic: node.name,
+            today: to_date(this.clock.nowIso()),
+          }),
+        ];
+      });
+      if (additions.length) {
+        this.store.save_reviews(userId, [...reviews, ...additions]);
+      }
+      return apiOk(
+        { ...result, added_reviews: additions.length },
+        `已新增 ${result.added_nodes} 个节点、${result.added_edges} 条边，${additions.length} 个知识点已加入明日复习`,
+      );
+    } catch (error) {
+      return apiFail(`构建失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -914,6 +966,135 @@ export class SynapseCore {
       return apiOk({ total: remaining.length }, "资料已删除");
     } catch (error) {
       return apiFail(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 体验版一键载入完整闭环数据；显式调用，不影响任何默认用户流程。 */
+  async loadDemoData(userId = "default"): Promise<ApiResponse<Record<string, unknown>>> {
+    try {
+      const uid = userId || "default";
+      const today = to_date(this.clock.nowIso());
+      const startDate = add_days(today, -3);
+      const documentRecords = build_document_records(uid, [
+        {
+          id: "demo-math-notes",
+          name: "高三数学错题笔记.txt",
+          extracted_text:
+            "函数与导数：含参函数单调性讨论要先求导，再按参数分类。" +
+            "证明不等式可使用切线放缩。圆锥曲线要注意斜率不存在的情况。" +
+            "数列错位相减时，公比等于一需要单独讨论。函数单调性是当前薄弱点。",
+        },
+      ]);
+      this.store.save_documents(
+        uid,
+        documentRecords as unknown as Array<Record<string, unknown>>,
+      );
+      this.store.add_subject(uid, "高中数学", "演示数据");
+
+      const weeklyPlan: StudyPlanPayload["weekly_plan"] = [
+        {
+          day_index: 1,
+          focus: "函数与导数错题回顾",
+          tasks: [
+            {
+              title: "整理含参函数单调性错因",
+              subject: "高中数学",
+              task_type: "review",
+              duration_minutes: 25,
+              reason: "先定位高频失分原因",
+            },
+          ],
+          carry_over: [],
+        },
+        {
+          day_index: 2,
+          focus: "圆锥曲线专项",
+          tasks: [
+            {
+              title: "复习弦长公式并完成两道例题",
+              subject: "高中数学",
+              task_type: "practice",
+              duration_minutes: 35,
+              reason: "用练习校正公式记忆",
+            },
+          ],
+          carry_over: [],
+        },
+        {
+          day_index: 3,
+          focus: "数列与综合复盘",
+          tasks: [
+            {
+              title: "错位相减边界条件检查",
+              subject: "高中数学",
+              task_type: "practice",
+              duration_minutes: 30,
+              reason: "补齐公比等于一的边界",
+            },
+          ],
+          carry_over: [],
+        },
+      ];
+      const planMeta = this.store.save_plan(
+        uid,
+        "演示计划：基于高三数学错题资料安排三天针对性复习。",
+        weeklyPlan as unknown as Array<Record<string, unknown>>,
+        null,
+        "载入演示数据",
+        startDate,
+      );
+      for (const day of weeklyPlan.slice(0, 2)) {
+        const task = day.tasks[0]!;
+        this.progress.update_task_progress({
+          userId: uid,
+          taskKey: plan_task_key(day.day_index, task),
+          done: true,
+          taskTitle: task.title,
+          taskType: task.task_type,
+          actualMinutes: task.duration_minutes,
+          planVersion: planMeta.version,
+          planMessage: "高三数学错题冲刺",
+        });
+      }
+
+      const reviews = this.store.get_reviews(uid);
+      const reviewKeys = new Set(reviews.map((item) => item.key));
+      const dueTopics = ["含参函数单调性", "圆锥曲线弦长公式"];
+      const dueItems = dueTopics.flatMap((topic) => {
+        const key = review_key("高中数学", topic);
+        if (reviewKeys.has(key)) {
+          return [];
+        }
+        reviewKeys.add(key);
+        return [
+          {
+            ...create_review_item({
+              id: this.idGen.next(),
+              subject: "高中数学",
+              topic,
+              today: startDate,
+            }),
+            due_date: today,
+          },
+        ];
+      });
+      if (dueItems.length) {
+        this.store.save_reviews(uid, [...reviews, ...dueItems]);
+      }
+
+      const graphResult = await this.buildKgFromDocument("demo-math-notes", uid);
+      return apiOk(
+        {
+          document_count: this.store.get_documents(uid).length,
+          plan_version: planMeta.version,
+          completed_tasks: 2,
+          due_reviews: dueItems.length,
+          graph: graphResult.data,
+        },
+        "演示数据已载入：资料、计划、打卡、复习队列与知识图谱均已就绪",
+      );
+    } catch (error) {
+      return apiFail(`载入失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
