@@ -1499,6 +1499,11 @@ svg {
   pointer-events: none;
 }
 
+/* 无提示时不占位：否则内边距会把这个空胶囊画在页面顶部中间 */
+.notice.snackbar:empty {
+  display: none;
+}
+
 .feedback {
   margin-top: 10px;
   color: var(--text-muted);
