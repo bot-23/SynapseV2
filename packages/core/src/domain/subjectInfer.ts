@@ -64,6 +64,9 @@ const SUBJECT_KEYWORDS: ReadonlyArray<readonly [string, readonly string[]]> = [
 /**
  * 从一句话里判断科目（只看正文，没有文件名加权）。
  * 作业句（「数学第三章习题1-20明天交」）用它填科目；判不出返回空串，不硬猜。
+ *
+ * 平分时的兜底：先被提到的那个科目优先。「化学方程式默写20个」里「数学」命中
+ * 「方程」、「化学」命中「化学」，各 1 分；只看表序会把化学作业塞进数学。
  */
 export function detect_subject_from_text(text: string): string {
   const body = String(text ?? "").toLowerCase();
@@ -72,15 +75,22 @@ export function detect_subject_from_text(text: string): string {
   }
   let best = "";
   let bestScore = 0;
+  let bestIndex = Number.MAX_SAFE_INTEGER;
   for (const [subject, keywords] of SUBJECT_KEYWORDS) {
     let score = 0;
+    let firstIndex = Number.MAX_SAFE_INTEGER;
     for (const keyword of keywords) {
-      if (body.includes(keyword.toLowerCase())) {
+      const at = body.indexOf(keyword.toLowerCase());
+      if (at >= 0) {
         score += 1;
+        if (at < firstIndex) {
+          firstIndex = at;
+        }
       }
     }
-    if (score > bestScore) {
+    if (score > bestScore || (score > 0 && score === bestScore && firstIndex < bestIndex)) {
       bestScore = score;
+      bestIndex = firstIndex;
       best = subject;
     }
   }

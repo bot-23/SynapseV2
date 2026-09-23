@@ -1423,6 +1423,54 @@ export class SynapseCore {
   }
 
   // ------------------------------------------------------------------
+  // 作业包（v2：一个人排好，全班扫一下）
+  // ------------------------------------------------------------------
+
+  /**
+   * 导出作业包：把还没做完的作业压成一段短码。
+   * 壳侧负责把这段码画成二维码（Web）或直接展示让人转发（小程序）。
+   */
+  exportAssignmentPack(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const pack = this.assignments.export_pack(userId || "default");
+      if (!pack.count) {
+        return apiFail("没有还没做完的作业，暂时没有可以分享的内容");
+      }
+      return apiOk(
+        pack as unknown as Record<string, unknown>,
+        `已把 ${pack.count} 条未完成作业打包，扫码或粘贴短码即可导入`,
+      );
+    } catch (error) {
+      return apiFail(`打包失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 导入作业包（扫码得到的内容或手贴的短码）。
+   * 幂等：同一包反复导入只会把缺的补上，不会越导越多。
+   */
+  importAssignmentPack(userId: string, code: string): ApiResponse<Record<string, unknown>> {
+    try {
+      const trimmed = String(code ?? "").trim();
+      if (!trimmed) {
+        return apiFail("请先扫码或粘贴作业包短码");
+      }
+      const result = this.assignments.import_pack(userId || "default", trimmed);
+      if (!result.recognized) {
+        return apiFail("这段码不是作业包：请扫同学分享的二维码，或粘贴完整的分享码");
+      }
+      const message = result.imported
+        ? `已导入 ${result.imported} 条作业${result.skipped ? `，跳过 ${result.skipped} 条已存在` : ""}`
+        : result.skipped
+          ? `这 ${result.skipped} 条作业你已经有了`
+          : "这个作业包里没有可导入的条目";
+      return apiOk({ ...result } as unknown as Record<string, unknown>, message);
+    } catch (error) {
+      return apiFail(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 学习仪表盘 / 数据导出（v2：数据闭环与数据主权）
   // ------------------------------------------------------------------
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toDataURL } from 'qrcode'
 import { getCore, DEFAULT_USER_ID } from '../services/synapse'
 
 interface AssignmentItemView {
@@ -39,6 +40,12 @@ interface BoardView {
   overdue_count: number
 }
 
+interface PackView {
+  code: string
+  count: number
+  skipped_done: number
+}
+
 function todayString(): string {
   const now = new Date()
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -73,6 +80,9 @@ export default function AssignmentsView() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [pack, setPack] = useState<PackView | null>(null)
+  const [qr, setQr] = useState('')
+  const [importCode, setImportCode] = useState('')
 
   const flash = (message: string) => {
     setNotice(message)
@@ -120,6 +130,50 @@ export default function AssignmentsView() {
     const result = getCore().rescheduleOverdueAssignments(DEFAULT_USER_ID)
     console.log('[Synapse] 逾期重排', result.success, result.message)
     flash(result.message)
+    load()
+  }
+
+  const exportPack = async () => {
+    const result = getCore().exportAssignmentPack(DEFAULT_USER_ID)
+    console.log('[Synapse] 生成作业包', result.success, result.message)
+    flash(result.message)
+    if (!result.success) {
+      return
+    }
+    const data = (result.data ?? {}) as unknown as PackView
+    setPack(data)
+    try {
+      // 纠错级别取 L：作业包是纯文本短码，容量优先，扫起来也更省事
+      setQr(await toDataURL(data.code, { margin: 1, width: 260, errorCorrectionLevel: 'L' }))
+    } catch {
+      // 码太长画不出二维码时，退化成「只给短码」，不能让人卡在这一步
+      setQr('')
+    }
+  }
+
+  const copyCode = async () => {
+    if (!pack) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(pack.code)
+      flash('短码已复制')
+    } catch {
+      flash('浏览器不允许自动复制，请手动选中短码')
+    }
+  }
+
+  const importPack = () => {
+    const code = importCode.trim()
+    if (!code) {
+      return
+    }
+    const result = getCore().importAssignmentPack(DEFAULT_USER_ID, code)
+    console.log('[Synapse] 导入作业包', result.success, result.message)
+    flash(result.message)
+    if (result.success && Number((result.data ?? {})['imported'] ?? 0) > 0) {
+      setImportCode('')
+    }
     load()
   }
 
@@ -236,6 +290,64 @@ export default function AssignmentsView() {
             </div>
           )
         })}
+      </div>
+
+      <div className="mine-card">
+        <div className="card-title">作业包</div>
+        <div className="card-desc">
+          作业天然是一对多：老师的话一个人听懂就够，全班却要各记一遍。排好后生成一个作业包，
+          同学用小程序扫一下（或把短码粘到下面）就能直接导入，不用重录一遍。
+        </div>
+        <button
+          type="button"
+          className={`primary-button${board?.pending_count || board?.overdue_count ? '' : ' disabled'}`}
+          disabled={!board?.pending_count && !board?.overdue_count}
+          onClick={exportPack}
+        >
+          生成作业包
+        </button>
+
+        {pack && (
+          <div className="pack-row">
+            {qr ? (
+              <img className="pack-qr" src={qr} alt="作业包二维码" />
+            ) : (
+              <div className="pack-qr pack-qr-empty">码太长，画不出二维码，复制短码给同学即可</div>
+            )}
+            <div className="pack-side">
+              <div className="card-desc">
+                共 {pack.count} 条未完成作业
+                {pack.skipped_done ? `（已完成的 ${pack.skipped_done} 条不带出去）` : ''}
+              </div>
+              <textarea
+                className="mine-textarea pack-code"
+                value={pack.code}
+                readOnly
+                rows={5}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <button type="button" className="doc-build" onClick={copyCode}>
+                复制短码
+              </button>
+            </div>
+          </div>
+        )}
+
+        <textarea
+          className="mine-textarea pack-code"
+          placeholder="把同学发来的作业包短码粘到这里（含首行 SYNAPSE-ASG/1）"
+          value={importCode}
+          onChange={(event) => setImportCode(event.target.value)}
+          rows={4}
+        />
+        <button
+          type="button"
+          className="doc-build"
+          disabled={!importCode.trim()}
+          onClick={importPack}
+        >
+          导入作业包
+        </button>
       </div>
 
       <div className="mine-card">

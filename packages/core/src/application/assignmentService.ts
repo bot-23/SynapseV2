@@ -9,6 +9,8 @@
 
 import type {
   AssignmentItem,
+  AssignmentPackExport,
+  AssignmentPackImportResult,
   AssignmentSnapshot,
   ReviewItem,
   StudyPlanRequest,
@@ -23,6 +25,10 @@ import {
   refresh_assignment_statuses,
   reschedule_overdue_items,
 } from "../domain/assignment.js";
+import {
+  decode_assignment_pack,
+  encode_assignment_pack,
+} from "../domain/assignmentPack.js";
 import { apply_timetable_to_payload } from "../domain/timetable.js";
 import { create_review_item, review_key } from "../domain/review.js";
 import { detect_subject_from_text } from "../domain/subjectInfer.js";
@@ -163,27 +169,19 @@ export class AssignmentService {
         continue;
       }
       known.add(identity);
-      created.push({
-        id: this.idGen.next(),
-        subject: draft.subject,
-        title: draft.title,
-        quantity: Math.max(0, Math.trunc(draft.quantity)),
-        unit: draft.unit,
-        due_date: dueDate || today,
-        estimated_minutes:
-          draft.estimated_minutes > 0
-            ? Math.trunc(draft.estimated_minutes)
-            : estimate_assignment_minutes(draft.quantity, draft.unit),
-        status: "pending",
-        done_at: "",
-        created_at: today,
-        source_text: draft.source_text || text,
-        review_card_ids: [],
-        plan_id: "",
-        plan_version: savedPlan ? (savedPlan.version ?? null) : null,
-        original_due_date: "",
-        rescheduled_at: "",
-      });
+      created.push(
+        this._new_item({
+          subject: draft.subject,
+          title: draft.title,
+          quantity: draft.quantity,
+          unit: draft.unit,
+          due_date: dueDate || today,
+          estimated_minutes: draft.estimated_minutes,
+          source_text: draft.source_text || text,
+          today,
+          plan_version: savedPlan ? (savedPlan.version ?? null) : null,
+        }),
+      );
     }
 
     if (created.length) {
@@ -245,6 +243,120 @@ export class AssignmentService {
       this.store.save_assignments(uid, next);
     }
     return { snapshot: this.snapshot(uid), moved };
+  }
+
+  /**
+   * 打包成作业包：只带「还没做完」的作业。
+   *
+   * 已完成的不发出去 —— 分享的场景是「我整理好今天的作业，发到班群」，
+   * 把别人已经打完卡的东西再塞回去，只会让收到的人多按几次删除。
+   */
+  export_pack(userId: string): AssignmentPackExport {
+    const uid = userId || "default";
+    const snapshot = this.snapshot(uid);
+    const shareable = snapshot.items.filter((item) => item.status !== "done");
+    return {
+      code: encode_assignment_pack(shareable),
+      count: shareable.length,
+      skipped_done: snapshot.done_count,
+    };
+  }
+
+  /**
+   * 导入作业包。
+   *
+   * 幂等：以「标题 + 截止日」为身份，同一包导入两次不会长出重复条目，
+   * 同学之间互相转发也不会越导越多。
+   */
+  import_pack(userId: string, code: string): AssignmentPackImportResult {
+    const uid = userId || "default";
+    const today = this.today();
+    const { recognized, drafts, invalid } = decode_assignment_pack(code);
+    if (!recognized || !drafts.length) {
+      return {
+        snapshot: this.snapshot(uid),
+        recognized,
+        imported: 0,
+        skipped: 0,
+        invalid,
+      };
+    }
+
+    const existing = this.store.get_assignments(uid);
+    const known = new Set(existing.map((item) => `${item.title}\u0000${item.due_date}`));
+    const savedPlan = this.store.get_plan(uid);
+    const created: AssignmentItem[] = [];
+    let skipped = 0;
+    for (const draft of drafts) {
+      const identity = `${draft.title}\u0000${draft.due_date}`;
+      if (known.has(identity)) {
+        skipped += 1;
+        continue;
+      }
+      known.add(identity);
+      created.push(
+        this._new_item({
+          subject: draft.subject,
+          title: draft.title,
+          quantity: draft.quantity,
+          unit: draft.unit,
+          due_date: draft.due_date,
+          estimated_minutes: draft.estimated_minutes,
+          source_text: draft.title,
+          today,
+          plan_version: savedPlan ? (savedPlan.version ?? null) : null,
+        }),
+      );
+    }
+    if (created.length) {
+      this.store.save_assignments(uid, [...existing, ...created]);
+    }
+    return {
+      snapshot: this.snapshot(uid),
+      recognized: true,
+      imported: created.length,
+      skipped,
+      invalid,
+    };
+  }
+
+  /**
+   * 新建一条作业。
+   * `ingest`（自己录入）与 `import_pack`（扫同学的包）共用，
+   * 保证两条入口产出的字段完全一致，不会一边有一边漏。
+   */
+  private _new_item(draft: {
+    subject: string;
+    title: string;
+    quantity: number;
+    unit: string;
+    due_date: string;
+    estimated_minutes: number;
+    source_text: string;
+    today: string;
+    plan_version: number | null;
+  }): AssignmentItem {
+    return {
+      id: this.idGen.next(),
+      subject: draft.subject,
+      title: draft.title,
+      quantity: Math.max(0, Math.trunc(draft.quantity)),
+      unit: draft.unit,
+      due_date: draft.due_date,
+      estimated_minutes:
+        draft.estimated_minutes > 0
+          ? Math.trunc(draft.estimated_minutes)
+          : estimate_assignment_minutes(draft.quantity, draft.unit),
+      status: "pending",
+      done_at: "",
+      created_at: draft.today,
+      source_text: draft.source_text,
+      review_card_ids: [],
+      plan_id: "",
+      plan_version: draft.plan_version,
+      original_due_date: "",
+      rescheduled_at: "",
+    };
   }
 
   /** 模型返回的条目做形状校验；日期非法时用规则解析器补，实在解析不出交给今天兜底。 */

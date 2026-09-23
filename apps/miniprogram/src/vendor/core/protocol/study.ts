@@ -283,6 +283,34 @@ export interface AssignmentSnapshot {
 }
 
 /**
+ * 作业包：把还没做完的作业压成一段可扫码 / 可粘贴的短码。
+ *
+ * 为什么要有它：老师布置作业这件事天然是一对多（一个人知道、全班要记），
+ * 但每条作业的解析（截止日、数量、科目）都要花一次模型或规则成本。一个人排好、
+ * 全班扫一下，重复劳动就没了 —— 这是「资料可分享」之外更刚需的一层。
+ */
+export interface AssignmentPackExport {
+  /** 短码本体：首行是签名，其余每行一条作业 */
+  code: string;
+  /** 打包进去的作业条数 */
+  count: number;
+  /** 因为已完成而没有被打包的条数 */
+  skipped_done: number;
+}
+
+/** 作业包导入结果。 */
+export interface AssignmentPackImportResult {
+  snapshot: AssignmentSnapshot;
+  /** 这段码的签名是否匹配（不匹配说明扫的不是作业包） */
+  recognized: boolean;
+  imported: number;
+  /** 因为「标题 + 截止日」已存在而跳过的条数 */
+  skipped: number;
+  /** 格式不对被忽略的行数 */
+  invalid: number;
+}
+
+/**
  * 复习项（v2 间隔重复）。
  *
  * 完成一个学习类任务时自动进入复习队列，之后按 SM-2 算出的到期日排进当天。

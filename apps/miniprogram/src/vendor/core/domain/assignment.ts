@@ -25,14 +25,13 @@ const UNIT_MINUTES: Readonly<Record<string, number>> = {
   题: 3,
   页: 10,
   单词: 0.5,
+  字: 0.05,
   张: 30,
   篇: 20,
   遍: 5,
   个: 3,
   套: 20,
   组: 10,
-  课: 20,
-  章: 30,
 };
 
 const UNIT_ALIASES: Readonly<Record<string, string>> = {
@@ -42,9 +41,15 @@ const UNIT_ALIASES: Readonly<Record<string, string>> = {
   道: "题",
   个单词: "单词",
   单词表: "单词",
+  个字: "字",
 };
 
-const UNIT_PATTERN = "道题|小题|大题|道|题|个单词|单词表|单词|页|张|篇|遍|套|组|课|章|个";
+/**
+ * 可计量的单位。
+ * 刻意**不含**「课」「章」「单元」：「抄写第 5 课」里的 5 是课次标识，不是数量，
+ * 把它当数量会凭空造出「5 课」这种不存在的作业量。
+ */
+const UNIT_PATTERN = "道题|小题|大题|道|题|个单词|单词表|单词|页|张|篇|份|遍|套|组|个字|字|个";
 
 /** 区间数量：「第1-20题」「1~20题」「3到5页」→ 总量（20 / 3），不是结束序号。 */
 const RANGE_QUANTITY_RE = new RegExp(
@@ -56,8 +61,49 @@ const UNIT_FIRST_RANGE_RE = new RegExp(
   `(${UNIT_PATTERN})\\s*(\\d{1,3})\\s*(?:[-~～至到—]|\\s)\\s*(\\d{1,3})`,
 );
 
+/** 单位重复的区间：「第3页到第5页」「1题至10题」——两端都写了单位。 */
+const UNIT_BOTH_RANGE_RE = new RegExp(
+  `第?\\s*(\\d{1,3})\\s*(${UNIT_PATTERN})\\s*(?:到|至|[-~～—])\\s*第?\\s*(\\d{1,3})\\s*(${UNIT_PATTERN})`,
+);
+
 /** 单值数量：「20题」「3页」；前面不紧跟字母数字，避免把「Unit3单词」的 3 当数量。 */
 const SINGLE_QUANTITY_RE = new RegExp(`(^|[^A-Za-z0-9])(\\d+)\\s*(${UNIT_PATTERN})`);
+
+/** 中文数字数量：「两篇」「十个」「一份」——中文作业里比阿拉伯数字更常见。 */
+const CN_QUANTITY_RE = new RegExp(`([一二两三四五六七八九十]{1,3})\\s*(${UNIT_PATTERN})`);
+
+const CN_DIGITS: Readonly<Record<string, number>> = {
+  一: 1,
+  二: 2,
+  两: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+
+/** 解析「十 / 十五 / 二十 / 二十三」这类中文数字；无法确定时返回 null。 */
+function parse_cn_number(raw: string): number | null {
+  const text = (raw || "").trim();
+  if (!text) {
+    return null;
+  }
+  if (text === "十") {
+    return 10;
+  }
+  const tenIndex = text.indexOf("十");
+  if (tenIndex >= 0) {
+    const tens = tenIndex === 0 ? 1 : (CN_DIGITS[text[0]!] ?? 0);
+    const ones =
+      tenIndex === text.length - 1 ? 0 : (CN_DIGITS[text[tenIndex + 1]!] ?? 0);
+    const value = tens * 10 + ones;
+    return value > 0 ? value : null;
+  }
+  return text.length === 1 ? (CN_DIGITS[text] ?? null) : null;
+}
 
 /** 相对日期词表，越具体的越靠前。 */
 const RELATIVE_DAY_WORDS: ReadonlyArray<readonly [string, number]> = [
@@ -132,6 +178,15 @@ function normalize_unit(raw: string): string {
 }
 
 function extract_quantity(text: string): { quantity: number; unit: string } {
+  // 「第3页到第5页」：两端都带单位，且单位要一致才算一个区间
+  const both = UNIT_BOTH_RANGE_RE.exec(text);
+  if (both) {
+    const from = Math.min(Number(both[1]), Number(both[3]));
+    const to = Math.max(Number(both[1]), Number(both[3]));
+    if (to > from && normalize_unit(both[2]!) === normalize_unit(both[4]!)) {
+      return { quantity: to - from + 1, unit: normalize_unit(both[2]!) };
+    }
+  }
   const range = RANGE_QUANTITY_RE.exec(text);
   if (range) {
     const first = Number(range[1]);
@@ -161,6 +216,13 @@ function extract_quantity(text: string): { quantity: number; unit: string } {
     const quantity = Number(single[2]);
     if (Number.isFinite(quantity) && quantity > 0) {
       return { quantity, unit: normalize_unit(single[3]!) };
+    }
+  }
+  const cn = CN_QUANTITY_RE.exec(text);
+  if (cn) {
+    const quantity = parse_cn_number(cn[1]!);
+    if (quantity && quantity > 0) {
+      return { quantity, unit: normalize_unit(cn[2]!) };
     }
   }
   return { quantity: 0, unit: "" };
@@ -305,6 +367,22 @@ export function refresh_assignment_statuses(
   });
 }
 
+/** 强作业名词：出现这些词基本可以确定是老师布置的任务，优先于目标句式判定。 */
+const STRONG_HOMEWORK_NOUNS = [
+  "作业",
+  "习题",
+  "练习册",
+  "卷子",
+  "试卷",
+  "实验报告",
+  "周记",
+  "读后感",
+  "错题",
+];
+
+/** 目标句式动词：出现这些词说明用户在说「我想学」，而不是「我必须交」。 */
+const GOAL_VERBS = ["开始", "打算", "想要", "计划", "坚持", "准备"];
+
 /** 这句话是不是在说老师布置的作业（离线兜底判定）。 */
 export function looks_like_assignment(text: string): boolean {
   const value = String(text ?? "").trim();
@@ -312,6 +390,13 @@ export function looks_like_assignment(text: string): boolean {
     return false;
   }
   if (!DUE_HINT_RE.test(value)) {
+    return false;
+  }
+  if (STRONG_HOMEWORK_NOUNS.some((word) => value.includes(word))) {
+    return true;
+  }
+  // 「明天开始背单词」有截止词和作业词，但语义是立目标，不是交作业。
+  if (GOAL_VERBS.some((word) => value.includes(word))) {
     return false;
   }
   if (HOMEWORK_WORDS.some((word) => value.includes(word))) {

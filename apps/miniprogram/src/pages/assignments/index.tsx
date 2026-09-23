@@ -41,6 +41,12 @@ interface BoardView {
   overdue_count: number
 }
 
+interface PackView {
+  code: string
+  count: number
+  skipped_done: number
+}
+
 function todayString(): string {
   const now = new Date()
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -67,6 +73,8 @@ export default function AssignmentsPage() {
   const [board, setBoard] = useState<BoardView | null>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pack, setPack] = useState<PackView | null>(null)
+  const [importCode, setImportCode] = useState('')
 
   const load = () => {
     const result = getCore().listAssignments(DEFAULT_USER_ID)
@@ -109,6 +117,50 @@ export default function AssignmentsPage() {
     console.log('[Synapse] 逾期重排', result.success, result.message)
     Taro.showToast({ title: result.message, icon: 'none' })
     load()
+  }
+
+  const exportPack = () => {
+    const result = getCore().exportAssignmentPack(DEFAULT_USER_ID)
+    console.log('[Synapse] 生成作业包', result.success, result.message)
+    Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
+    if (result.success) {
+      setPack((result.data ?? {}) as unknown as PackView)
+    }
+  }
+
+  const copyCode = () => {
+    if (!pack) {
+      return
+    }
+    Taro.setClipboardData({ data: pack.code })
+      .then(() => Taro.showToast({ title: '短码已复制，粘到班群即可', icon: 'none' }))
+      .catch(() => Taro.showToast({ title: '复制失败', icon: 'none' }))
+  }
+
+  const importPack = (code: string) => {
+    const value = code.trim()
+    if (!value) {
+      Taro.showToast({ title: '先扫码或粘贴短码', icon: 'none' })
+      return
+    }
+    const result = getCore().importAssignmentPack(DEFAULT_USER_ID, value)
+    console.log('[Synapse] 导入作业包', result.success, result.message)
+    Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
+    if (result.success && Number((result.data ?? {})['imported'] ?? 0) > 0) {
+      setImportCode('')
+    }
+    load()
+  }
+
+  const scanPack = async () => {
+    try {
+      // 只认二维码；允许从相册选图，同学把二维码截图发过来也能用
+      const scanned = await Taro.scanCode({ onlyFromCamera: false, scanType: ['qrCode'] })
+      importPack(String(scanned.result ?? ''))
+    } catch (error) {
+      // 用户取消扫码，或环境不支持（开发者工具）—— 不打扰，粘贴入口照旧可用
+      console.log('[Synapse] 扫码取消或不可用', error)
+    }
   }
 
   const today = todayString()
@@ -219,6 +271,61 @@ export default function AssignmentsPage() {
             </View>
           )
         })}
+      </View>
+
+      <View className={styles.card}>
+        <Text className={styles.cardTitle}>作业包</Text>
+        <Text className={styles.cardDesc}>
+          作业天然是一对多：老师的话一个人听懂就够，全班却要各记一遍。排好后生成短码发给同学，
+          或用「扫一扫」直接导入别人分享的作业包，不用重录一遍。
+        </Text>
+        <Button
+          className={classnames(
+            styles.primaryButton,
+            !board?.pending_count && !board?.overdue_count && styles.buttonDisabled
+          )}
+          disabled={!board?.pending_count && !board?.overdue_count}
+          onClick={exportPack}
+        >
+          生成作业包
+        </Button>
+
+        {!!pack && (
+          <View className={styles.packBox}>
+            <Text className={styles.cardDesc}>
+              共 {pack.count} 条未完成作业
+              {pack.skipped_done ? `（已完成的 ${pack.skipped_done} 条不带出去）` : ''}
+            </Text>
+            <Text className={styles.packCode}>{pack.code}</Text>
+            <View className={styles.smallButton} onClick={copyCode}>
+              <Text className={styles.smallButtonText}>复制短码</Text>
+            </View>
+          </View>
+        )}
+
+        <View className={styles.packActions}>
+          <View className={styles.smallButton} onClick={scanPack}>
+            <Text className={styles.smallButtonText}>扫一扫导入</Text>
+          </View>
+        </View>
+
+        <Textarea
+          className={styles.textarea}
+          placeholder="或把同学发来的作业包短码粘到这里（含首行 SYNAPSE-ASG/1）"
+          value={importCode}
+          maxlength={-1}
+          onInput={(event) => setImportCode(String(event.detail.value))}
+        />
+        <Button
+          className={classnames(
+            styles.primaryButton,
+            !importCode.trim() && styles.buttonDisabled
+          )}
+          disabled={!importCode.trim()}
+          onClick={() => importPack(importCode)}
+        >
+          导入作业包
+        </Button>
       </View>
 
       <View className={styles.card}>

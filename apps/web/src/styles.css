@@ -2702,6 +2702,49 @@ svg {
   font-size: 11px;
 }
 
+/* F5：作业包（扫一下，全班都有了） */
+.pack-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.pack-qr {
+  flex: 0 0 auto;
+  width: 180px;
+  height: 180px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--warm-border);
+  border-radius: var(--radius-md);
+}
+
+.pack-qr-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.pack-side {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.pack-code {
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;

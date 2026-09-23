@@ -7,9 +7,10 @@ export default defineConfig({
     host: true,
     port: 5180,
   },
-  // pdf.js 是动态 import 的大依赖：预打包掉，避免首次选 PDF 时触发 dev server 重新优化导致页面刷新
+  // pdf.js 是动态 import 的大依赖：预打包掉，避免首次选 PDF 时触发 dev server 重新优化导致页面刷新。
+  // qrcode 是纯 CJS 包，预打包顺带完成 CJS → ESM 互操作。
   optimizeDeps: {
-    include: ['pdfjs-dist'],
+    include: ['pdfjs-dist', 'qrcode'],
   },
   build: {
     outDir: 'dist',

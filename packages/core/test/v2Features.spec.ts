@@ -52,6 +52,11 @@ import {
   parse_assignment_due,
   parse_assignment_items,
 } from "../src/domain/assignment.js";
+import {
+  ASSIGNMENT_PACK_HEADER,
+  decode_assignment_pack,
+  encode_assignment_pack,
+} from "../src/domain/assignmentPack.js";
 import { KgBuilder } from "../src/application/kgBuilder.js";
 import { KgRetrievalProvider } from "../src/providers/kgRetrieval.js";
 
@@ -1930,6 +1935,162 @@ describe("core v2：学习仪表盘与数据导出（F4）", () => {
     expect(payload["assignments:default"]).toBeTruthy();
     expect(JSON.stringify(payload)).not.toContain("sk-should-never-be-exported");
     expect(String(result.data!["filename"])).toContain("synapse-export-");
+  });
+});
+
+describe("core v2：作业包与扫码分发（F5）", () => {
+  /** 2026-03-04 是周三，相对日期解析结果与 F3 保持一致。 */
+  const TODAY = "2026-03-04";
+  const fixedClock = { nowIso: () => `${TODAY}T09:00:00.000Z` };
+
+  function packItem(patch: Partial<AssignmentItem> = {}): AssignmentItem {
+    return {
+      id: `pack-${++idCounter}`,
+      subject: "数学",
+      title: "第三章习题",
+      quantity: 20,
+      unit: "题",
+      due_date: "2026-03-05",
+      estimated_minutes: 60,
+      status: "pending",
+      done_at: "",
+      created_at: TODAY,
+      source_text: "数学第三章习题1-20明天交",
+      review_card_ids: [],
+      plan_id: "",
+      plan_version: null,
+      original_due_date: "",
+      rescheduled_at: "",
+      ...patch,
+    };
+  }
+
+  /** 每次给一台独立设备（独立 KV），用来模拟「同学扫我的码」。 */
+  function newCore(): SynapseCore {
+    return createSynapseCore({ kv: new MemoryKvStore(), clock: fixedClock, idGen: testIdGen });
+  }
+
+  async function twoAssignments(core: SynapseCore): Promise<void> {
+    await core.createAssignments("default", "数学第三章习题1-20明天交，英语背Unit3单词周五默写");
+  }
+
+  it("打包 → 解包字段逐字还原，空单位与 0 数量也不能丢", () => {
+    const code = encode_assignment_pack([
+      packItem(),
+      packItem({
+        subject: "英语",
+        title: "背Unit3单词",
+        quantity: 0,
+        unit: "",
+        estimated_minutes: 15,
+        due_date: "2026-03-06",
+      }),
+    ]);
+    expect(code.split("\n")[0]).toBe(ASSIGNMENT_PACK_HEADER);
+
+    const { recognized, drafts, invalid } = decode_assignment_pack(code);
+    expect(recognized).toBe(true);
+    expect(invalid).toBe(0);
+    expect(drafts).toEqual([
+      {
+        due_date: "2026-03-05",
+        subject: "数学",
+        title: "第三章习题",
+        quantity: 20,
+        unit: "题",
+        estimated_minutes: 60,
+      },
+      {
+        due_date: "2026-03-06",
+        subject: "英语",
+        title: "背Unit3单词",
+        quantity: 0,
+        unit: "",
+        estimated_minutes: 15,
+      },
+    ]);
+  });
+
+  it("坏行只丢那一行，不整包作废；签名不对则整包不认", () => {
+    const broken = [
+      ASSIGNMENT_PACK_HEADER,
+      "2026-03-05|数学|第三章习题|20|题|60",
+      "只有三列|缺字段",
+      "2026/03/06|英语|日期格式不对|1|篇|30",
+      "2026-03-07|语文|周记|1|篇|30",
+    ].join("\n");
+
+    const result = decode_assignment_pack(broken);
+    expect(result.recognized).toBe(true);
+    expect(result.invalid).toBe(2);
+    expect(result.drafts.map((draft) => draft.title)).toEqual(["第三章习题", "周记"]);
+
+    expect(decode_assignment_pack("https://example.com/whatever").recognized).toBe(false);
+    expect(decode_assignment_pack("").recognized).toBe(false);
+  });
+
+  it("导出未完成作业，导入到另一台设备后科目与截止日不丢，并自动进排期", async () => {
+    const mine = newCore();
+    await twoAssignments(mine);
+    const pack = mine.exportAssignmentPack("default");
+    expect(pack.success).toBe(true);
+    expect(Number(pack.data!["count"])).toBe(2);
+
+    const classmate = newCore();
+    const result = classmate.importAssignmentPack("default", String(pack.data!["code"]));
+    expect(result.success).toBe(true);
+    expect(Number(result.data!["imported"])).toBe(2);
+    expect(Number(result.data!["skipped"])).toBe(0);
+
+    const board = classmate.listAssignments("default").data as unknown as {
+      items: AssignmentItem[];
+      schedule: unknown[];
+    };
+    expect(board.items.map((item) => `${item.subject}@${item.due_date}`).sort()).toEqual([
+      "数学@2026-03-05",
+      "英语@2026-03-06",
+    ]);
+    expect(board.schedule.length).toBeGreaterThan(0);
+  });
+
+  it("同一个包反复导入、互相转发，都长不出重复条目", async () => {
+    const mine = newCore();
+    await twoAssignments(mine);
+    const code = String(mine.exportAssignmentPack("default").data!["code"]);
+
+    const classmate = newCore();
+    classmate.importAssignmentPack("default", code);
+    const again = classmate.importAssignmentPack("default", code);
+    expect(Number(again.data!["imported"])).toBe(0);
+    expect(Number(again.data!["skipped"])).toBe(2);
+
+    const board = classmate.listAssignments("default").data as unknown as { total: number };
+    expect(board.total).toBe(2);
+  });
+
+  it("已完成的作业不会被打包发出去", async () => {
+    const core = newCore();
+    await twoAssignments(core);
+    const items = (core.listAssignments("default").data as unknown as { items: AssignmentItem[] })
+      .items;
+    const first = items[0]!;
+    core.completeAssignment("default", first.id, true);
+
+    const pack = core.exportAssignmentPack("default");
+    expect(Number(pack.data!["count"])).toBe(1);
+    expect(Number(pack.data!["skipped_done"])).toBe(1);
+    expect(String(pack.data!["code"])).not.toContain(first.title);
+  });
+
+  it("不是作业包的码会被明确拒绝，空清单不给打包", () => {
+    const core = newCore();
+    expect(core.exportAssignmentPack("default").success).toBe(false);
+
+    const bad = core.importAssignmentPack("default", "随便一段文字");
+    expect(bad.success).toBe(false);
+    expect(bad.message).toContain("不是作业包");
+
+    expect(core.importAssignmentPack("default", "   ").success).toBe(false);
   });
 });
 

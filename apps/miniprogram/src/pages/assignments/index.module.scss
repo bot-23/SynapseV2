@@ -87,6 +87,28 @@
   white-space: nowrap;
 }
 
+.packBox {
+  margin-top: $spacing-sm;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.packCode {
+  display: block;
+  margin-top: $spacing-sm;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  word-break: break-all;
+}
+
+.packActions {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-sm;
+}
+
 .groupHead {
   display: flex;
   align-items: center;
