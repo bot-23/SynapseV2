@@ -12,6 +12,7 @@ import type {
 } from '@synapse/core'
 import { BrowserKvStore } from '../adapters/kvStore'
 import { BrowserHttpTransport } from '../adapters/httpTransport'
+import { pdfExtractor } from '../adapters/pdfExtractor'
 import { browserClock, browserIdGen } from '../adapters/system'
 
 let core: SynapseCore | null = null
@@ -21,6 +22,8 @@ export function getCore(): SynapseCore {
     core = createSynapseCore({
       kv: new BrowserKvStore(),
       http: new BrowserHttpTransport(),
+      // 资料库的 PDF 由壳注入 pdf.js 提取，core 只声明 FileExtractor 端口
+      fileExtractor: pdfExtractor,
       clock: browserClock,
       idGen: browserIdGen,
       // 没配 Key 时直接走规则引擎出计划，而不是回一句固定话术

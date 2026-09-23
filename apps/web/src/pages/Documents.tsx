@@ -15,6 +15,12 @@ interface DocumentView {
 }
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024
+/** PDF 是二进制文档，2MB 上限对它是误伤（一本讲义随便就几 MB）。 */
+const MAX_PDF_SIZE = 30 * 1024 * 1024
+
+function isPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+}
 
 export default function DocumentsView() {
   const [documents, setDocuments] = useState<DocumentView[]>([])
@@ -79,17 +85,24 @@ export default function DocumentsView() {
     const failed: string[] = []
     try {
       for (const file of Array.from(files)) {
-        if (file.size > MAX_FILE_SIZE) {
-          failed.push(`${file.name}（超过 2MB，请压缩或拆分后再传）`)
+        const pdf = isPdfFile(file)
+        const limit = pdf ? MAX_PDF_SIZE : MAX_FILE_SIZE
+        if (file.size > limit) {
+          failed.push(
+            `${file.name}（超过 ${Math.round(limit / 1024 / 1024)}MB，请压缩或拆分后再传）`,
+          )
           continue
         }
         try {
-          const content = await file.text()
+          // 文本按 UTF-8 读，PDF 必须按二进制读 —— 用 text() 读 PDF 会得到一堆乱码
+          const data = pdf
+            ? new Uint8Array(await file.arrayBuffer())
+            : new TextEncoder().encode(await file.text())
           const attachments = await getCore().extractFiles([
             {
               name: file.name,
-              contentType: file.type || 'text/plain',
-              data: new TextEncoder().encode(content),
+              contentType: file.type || (pdf ? 'application/pdf' : 'text/plain'),
+              data,
             },
           ])
           const attachment = attachments[0]
@@ -206,7 +219,7 @@ export default function DocumentsView() {
           <input
             type="file"
             multiple
-            accept=".txt,.md,.markdown,.mdx,text/plain,text/markdown"
+            accept=".txt,.md,.markdown,.mdx,.pdf,text/plain,text/markdown,application/pdf"
             className="file-input"
             onChange={(event) => {
               pickFiles(event.target.files)
@@ -217,9 +230,12 @@ export default function DocumentsView() {
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            从本机选择文本文件（.txt / .md，可多选）
+            从本机选择文件（.txt / .md / .pdf，可多选）
           </span>
         </label>
+        <div className="card-hint">
+          文本类上限 2MB，PDF 上限 30MB。PDF 由本机 pdf.js 逐页抽取文字（扫描件是图片，需要 OCR，暂不支持）。
+        </div>
 
         <input
           className="mine-input"

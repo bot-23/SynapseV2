@@ -24,7 +24,7 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 - core 单元测试、黄金样本、边界与压力测试：**100/100 通过**
 - core、小程序与 Web TypeScript 类型检查：通过
 - vendor 导入边界：通过（core 对外导出 161 个，检查 35 个壳文件）
-- Web Playwright 端到端测试：**17/17 通过**
+- Web Playwright 端到端测试：**19/19 通过**
 - Web 生产构建、微信小程序生产构建：通过
 - 真实中文 TXT：导入后切出 1 段，能在离线计划的消息、理由和 Day 1 任务中引用资料名
 
@@ -54,7 +54,8 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 | 阶段转短期计划 | ✅ | 可选择长期计划中的某个里程碑，重新生成本周计划 |
 | 复习队列 | ✅ | 完成学习任务自动入队；按 SM-2 安排到期复习，也可手动添加知识点 |
 | 课程表 | ✅ | 粘贴文本解析（钟点或「第 N-M 节」，后者按默认作息表换算）、自动分列教室与教师、手动录入、逐条校正；计划按空闲时间压缩任务量 |
-| 资料库 | ✅ | 支持粘贴文本、多选 `.txt` / `.md` 批量导入（逐个返回成功/失败，单个失败不阻塞其他）、2MB 超限明确提示、中文解码、切片与删除 |
+| 资料库 | ✅ | 支持粘贴文本、多选 `.txt` / `.md` / `.pdf` 批量导入（逐个返回成功/失败，单个失败不阻塞其他）、超限明确提示、中文解码、切片与删除 |
+| PDF 导入（Web） | ✅ | 壳注入 pdf.js 逐页抽取文字（动态 import 分包，主包只涨 2KB）；CMap 由 `scripts/copy-pdfjs-cmaps.mjs` 从 node_modules 复制到本地静态目录，中文 CID 字体不乱码，且不依赖外网 CDN |
 | 资料结构化元数据 | ✅ | 每份资料带科目（关键词表自动推断，可手改）、标签、来源（上传/粘贴）、字数、图谱节点数与复习卡数；旧数据读取侧补默认值，不需要迁移 |
 | 资料自动构图 | 🧪 | 每份资料可显式构建图谱；有 Key 时由模型抽取，无 Key/调用失败时降级为本地 bigram 高频词；构图后把节点 ID 回写到资料上 |
 | 图谱可视化 | ✅ | Web 使用 SVG、小程序使用 Canvas 环形布局；支持节点分类着色与点击查看说明 |
@@ -84,7 +85,7 @@ AI 学习陪伴助手。目标形态是 **「一个核心，多平台可用」**
 | 我的 | `pages/mine/index` | Tab | 画像、科目、Key、仪表盘、课程表、资料库、作业清单、知识图谱、数据导出、演示数据与数据清理入口 |
 | 历史会话 | `pages/conversations/index` | 二级页 | 新建、切换、长按删除会话 |
 | 课程表 | `pages/timetable/index` | 二级页 | 文本解析、手动录入、校正、保存 |
-| 资料库 | `pages/documents/index` | 二级页 | 粘贴或选择 TXT/MD（可多选）、查看元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除 |
+| 资料库 | `pages/documents/index` | 二级页 | 粘贴或选择 TXT/MD（可多选）、查看元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除（PDF 仅 Web 端支持） |
 | 作业清单 | `pages/assignments/index` | 二级页 | 粘贴作业原话排期、按截止日分组、倒计时、打卡、逾期重新排期、未来 7 天日程 |
 | 知识图谱 | `pages/graph/index` | 二级页 | 环形可视化节点与关系、点击节点查看说明 |
 | 云开发 AI 自检 | `pages/cloudcheck/index` | 实验页 | 探测 provider/model、思考模式、工具调用、JSON mode、流式输出 |
@@ -108,7 +109,9 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 
 | 能力 | 当前边界 |
 | --- | --- |
-| 资料格式 | UI 开放 `.txt` / `.md`（含 `.markdown` / `.mdx`）；core 还能识别 `.pdf`，但两端都未注入 PDF 提取器（见 §「尚未实现」，注入点只有 `ports/FileExtractor` 一处） |
+| 资料格式 | Web 端开放 `.txt` / `.md`（含 `.markdown` / `.mdx`）/ `.pdf`；小程序端仍只有文本类（未接 pdf.js）。core 通过 `ports/FileExtractor` 分发，PDF 提取器由壳注入 |
+| PDF 抽取 | Web 端由 pdf.js 逐页取 textContent；扫描件（图片版 PDF）**没有文字层，抽不出内容**，会给出「可能是扫描件，当前不支持 OCR」的明确提示而不是静默空结果 |
+| PDF 体量 | 文本类文件上限 2MB，PDF 上限 30MB；抽取文字仍受 core 的 20 万字索引上限约束，超出即停止翻页 |
 | 中文编码 | TXT 按 UTF-8 → GBK → GB2312 尝试；最终退回 UTF-8 宽松解码 |
 | 资料长度 | 单文件界面限制 2MB；core 单份资料最多索引 20 万字（超出部分不参与检索，不再静默截断到 6000 字） |
 | 作业日期解析 | 离线词表覆盖 今天/明天/后天/大后天、周X/星期X/礼拜X、下周X、M月D日、M/D、D号、「还有 X 天」；更绕的说法（「隔周周二」「下下周五」）需配上 Key 由模型抽取，解析不出会走澄清追问而不是静默丢弃 |
@@ -133,7 +136,7 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 
 | 能力 | 状态 | 缺口 |
 | --- | --- | --- |
-| PDF 导入 | 🧩 | `FileExtractor` 端口和 `.pdf` 分发已存在，小程序未接 pdf.js，也没有 PDF 选择入口；Web 端可在 `apps/web/src/services/synapse.ts` 的 `createSynapseCore({ fileExtractor })` 注入 pdf.js 实现，core 无需改动 |
+| PDF 导入（小程序） | 🧩 | core 的 `FileExtractor` 端口与 `.pdf` 分发已就绪（Web 端已接入 pdf.js，见上）；小程序端未接 pdf.js，没有 PDF 选择入口 |
 | 聊天附件 | ⏳ | 聊天请求仍固定 `files: []`；资料只能先在资料库导入 |
 | 图片/OCR/Word/Markdown | ⏳ | 没有解析器与 UI 入口（`.md` 作为纯文本已支持） |
 | 聊天流式打字机 | 🧩 | core 有 `runStream`，壳未消费流事件 |
@@ -148,7 +151,7 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 | Android 应用 | ⏳ | Tauri Mobile / Kotlin 薄壳均未实现 |
 | HTTP/SSE 服务端 | ⏳ | 协议可映射为 HTTP，但当前只有进程内调用，不提供服务器 |
 | 向量检索 | ⏳ | 没有 embedding 模型、向量库或语义召回 |
-| Web UI 自动化测试 | 🧪 | Playwright e2e 共 17 条，覆盖引导/对话/计划/资料导入（含 .md、批量上传）/资料构图/图谱/演示数据/移动端导航/课程表（含节次）/作业（对话排期、打卡、倒计时）/我的；微信原生交互仍需真机验收 |
+| Web UI 自动化测试 | 🧪 | Playwright e2e 共 19 条，覆盖引导/对话/计划/资料导入（含 .md、批量上传、PDF 抽取）/资料构图/图谱/演示数据/移动端导航/课程表（含节次）/作业（对话排期、打卡、倒计时）/我的；微信原生交互仍需真机验收 |
 
 ---
 
@@ -237,6 +240,7 @@ npm run typecheck
 | 核心 | 纯 TypeScript | — | `@synapse/core`，**零运行时依赖** |
 | 小程序壳 | Taro | 4.1.9 | React 18 + SCSS Modules，微信小程序为主 |
 | Web 壳 | Vite + React | ^5.4 / ^18 | `apps/web`，浏览器单页，直接复用 core |
+| PDF 解析 | pdfjs-dist | ^6.3 | **仅 Web 壳**注入 `ports/FileExtractor`；动态 import 分包（主包 +2KB），CMap 走本地目录，不依赖外网 CDN |
 | UI | React | ^18 | 函数组件 + Hooks |
 | 状态 | Zustand | ^4.5 | 页面级状态 |
 | 工具库（壳） | dayjs / classnames | ^1.11 / ^2.5 | 仅壳内使用，不进 core |
@@ -481,6 +485,8 @@ npm run e2e --workspace @synapse/web      # Web 端到端冒烟测试（Playwrig
 
 Web 端（`apps/web`）直接进程内复用 `@synapse/core`，浏览器用 `localStorage` 适配 KV、`fetch` 适配 HTTP、`crypto.randomUUID` 适配 ID。没配 DeepSeek Key 时同样走 `offlinePlanFallback` 本地规则模式。
 
+PDF 抽取用 `pdfjs-dist`，由 `apps/web/scripts/copy-pdfjs-cmaps.mjs` 在 `predev` / `prebuild` 阶段把 CMap 表从 `node_modules` 复制到 `apps/web/public/pdfjs/cmaps`（该目录已 gitignore，属「npm install 可再生」产物）。**CMap 不放 CDN** 是刻意的：本项目的演示卖点之一就是断网可用。
+
 ---
 
 ## 9. 平台现状与后续
@@ -488,7 +494,7 @@ Web 端（`apps/web`）直接进程内复用 `@synapse/core`，浏览器用 `loc
 | 平台 | 状态 |
 | --- | --- |
 | 微信小程序（Taro） | 已交付主链路及资料结构化 / 批量导入 / 一键学习化 / Canvas 图谱 / 作业清单 / 仪表盘 / 数据导出 / 演示数据；微信原生交互仍需真机验收，云开发 AI 仅自检 |
-| Web（Vite + React） | 已交付主链路及资料结构化 / 批量导入 / 一键学习化 / SVG 图谱 / 作业清单 / 仪表盘 / JSON 导出 / 演示数据，复用同一份 `@synapse/core`，18 条 e2e 通过 |
+| Web（Vite + React） | 已交付主链路及资料结构化 / 批量导入 / PDF 抽取 / 一键学习化 / SVG 图谱 / 作业清单 / 仪表盘 / JSON 导出 / 演示数据，复用同一份 `@synapse/core`，19 条 e2e 通过 |
 | 桌面（Tauri） | 待做 |
 | Android | 待做 |
 

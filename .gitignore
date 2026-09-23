@@ -27,6 +27,9 @@ apps/web/e2e/results/
 apps/web/test-results/
 apps/web/playwright-report/
 
+# pdf.js 的 CMap 复制产物（由 apps/web/scripts/copy-pdfjs-cmaps.mjs 从 node_modules 生成）
+apps/web/public/pdfjs/
+
 # 本地验收材料
 /trae-tasks.md
 /高三数学错题笔记.txt

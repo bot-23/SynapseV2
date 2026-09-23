@@ -4,6 +4,38 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+/**
+ * 造一个最小但字节合法的单页 PDF（ASCII 文本 + Helvetica），用于验证壳注入的 pdf.js 抽取链路。
+ * 内容全是 ASCII，字符数即字节数，所以手工算的 xref 偏移是准确的。
+ */
+function makePdf(lines: string[]): Buffer {
+  const content =
+    `BT /F1 12 Tf 40 760 Td 16 TL\n` +
+    lines.map((line) => `(${line}) Tj T*`).join('\n') +
+    `\nET`
+  const objects = [
+    `<< /Type /Catalog /Pages 2 0 R >>`,
+    `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ]
+
+  let pdf = '%PDF-1.4\n'
+  const offsets: number[] = []
+  objects.forEach((body, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`
+  })
+  const xrefStart = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`
+  return Buffer.from(pdf, 'latin1')
+}
+
 test.describe('资料库', () => {
   test('粘贴导入 → 出现在列表 → 删除', async ({ page }) => {
     await onboard(page)
@@ -91,5 +123,29 @@ test.describe('资料库', () => {
     await expect(snackbar).toContainText('失败 1 个')
     await expect(snackbar).toContainText('超过 2MB')
     await expect(page.locator('.mine-card', { hasText: '已导入' })).toContainText('已导入（2）')
+  })
+
+  test('从本机文件导入 PDF：pdf.js 抽取正文并入库', async ({ page }) => {
+    await onboard(page)
+    await page.locator('.nav-item', { hasText: '资料库' }).click()
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-pdf-'))
+    const filePath = path.join(dir, '导数讲义.pdf')
+    fs.writeFileSync(
+      filePath,
+      makePdf([
+        'Derivative lecture notes',
+        'Monotonicity of parametric functions requires differentiating first.',
+      ]),
+    )
+
+    await page.setInputFiles('input.file-input', filePath)
+
+    await expect(page.locator('.doc-name').first()).toHaveText('导数讲义.pdf', { timeout: 30_000 })
+    // 关键：正文真的被 pdf.js 抽出来了（而不是只把文件名列进列表）
+    await expect(page.locator('.doc-excerpt').first()).toContainText('Monotonicity', {
+      timeout: 30_000,
+    })
+    await expect(page.locator('.mine-card', { hasText: '已导入' })).toContainText('已导入（1）')
   })
 })
