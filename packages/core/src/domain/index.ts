@@ -47,6 +47,22 @@ export {
   reschedule_overdue_items,
   type AssignmentDraft,
 } from "./assignment.js";
+export {
+  ASSIGNMENT_PACK_HEADER,
+  ASSIGNMENT_PACK_MAX_ITEMS,
+  decode_assignment_pack,
+  encode_assignment_pack,
+  type AssignmentPackDraft,
+} from "./assignmentPack.js";
+export {
+  MASTERED_EASE,
+  MASTERED_REPETITIONS,
+  WEAK_EASE,
+  WEAK_LAPSES,
+  compute_mastery,
+  summarize_mastery,
+  type MasteryNodeInput,
+} from "./kgMastery.js";
 export { pyRound } from "./pyCompat.js";
 export { add_days, days_between, to_date } from "./dateMath.js";
 export {

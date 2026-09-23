@@ -43,7 +43,12 @@ import type {
   GenerateWithToolsResult,
   LlmProvider,
 } from "../src/providers/contracts.js";
-import type { AssignmentItem, StudyPlanRequest, TimetableEntry } from "../src/protocol/study.js";
+import type {
+  AssignmentItem,
+  KnowledgeMasteryEntry,
+  StudyPlanRequest,
+  TimetableEntry,
+} from "../src/protocol/study.js";
 import type { StudyPilotRunRequest } from "../src/protocol/frontend.js";
 import { buildTeachPrompt } from "../src/application/prompts.js";
 import {
@@ -57,6 +62,7 @@ import {
   decode_assignment_pack,
   encode_assignment_pack,
 } from "../src/domain/assignmentPack.js";
+import { compute_mastery, summarize_mastery } from "../src/domain/kgMastery.js";
 import { KgBuilder } from "../src/application/kgBuilder.js";
 import { KgRetrievalProvider } from "../src/providers/kgRetrieval.js";
 
@@ -2091,6 +2097,87 @@ describe("core v2：作业包与扫码分发（F5）", () => {
     expect(bad.message).toContain("不是作业包");
 
     expect(core.importAssignmentPack("default", "   ").success).toBe(false);
+  });
+});
+
+describe("core v2：图谱掌握度热力（G1）", () => {
+  const TODAY = "2026-03-04";
+
+  const nodes = [
+    { id: "n-weak", name: "函数单调性", subject: "数学" },
+    { id: "n-learning", name: "三角函数", subject: "数学" },
+    { id: "n-mastered", name: "数列错位相减", subject: "数学" },
+    { id: "n-untouched", name: "圆锥曲线", subject: "数学" },
+  ];
+
+  /** 按给定的评分序列真实推进一张卡（与线上走的是同一个 apply_sm2）。 */
+  function card(subject: string, topic: string, grades: number[], id: string) {
+    let item = create_review_item({ id, subject, topic, today: TODAY });
+    for (const grade of grades) {
+      item = apply_sm2(item, grade, TODAY);
+    }
+    return item;
+  }
+
+  it("四档判定：连对为掌握、连错为薄弱、单次为在学、无卡为未学", () => {
+    const entries = compute_mastery(nodes, [
+      card("数学", "函数单调性", [2, 2, 2], "c-weak"),
+      card("数学", "三角函数", [4], "c-learning"),
+      card("数学", "数列错位相减", [5, 5, 5], "c-mastered"),
+    ]);
+
+    const byId = new Map(entries.map((entry) => [entry.node_id, entry]));
+    expect(byId.get("n-weak")!.level).toBe("weak");
+    expect(byId.get("n-learning")!.level).toBe("learning");
+    expect(byId.get("n-mastered")!.level).toBe("mastered");
+    expect(byId.get("n-untouched")!.level).toBe("untouched");
+    expect(byId.get("n-untouched")!.card_count).toBe(0);
+    // 判定理由要能直接给人看，不能只有颜色
+    expect(byId.get("n-mastered")!.reason).toContain("连续记住");
+    expect(byId.get("n-weak")!.reason).toContain("1.54");
+    expect(summarize_mastery(entries)).toEqual({
+      weak: 1,
+      learning: 1,
+      mastered: 1,
+      untouched: 1,
+    });
+  });
+
+  it("关联不上的卡片被忽略；别名能对上节点；旧卡片缺字段不报错", () => {
+    const entries = compute_mastery(
+      [{ id: "n-alias", name: "函数单调性", subject: "数学", aliases: "单调性,函数单调性" }],
+      [
+        card("数学", "单调性", [5, 5, 5], "c-alias"),
+        card("数学", "图谱里根本没有这个知识点", [2, 2, 2], "c-orphan"),
+        { ...card("数学", "函数单调性", [], "c-legacy"), ease: undefined as unknown as number },
+      ],
+    );
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.card_count).toBe(2);
+    // 别名卡是绿的、旧卡难度按默认 2.5 兜底，平均下来仍然是掌握
+    expect(entries[0]!.level).toBe("mastered");
+  });
+
+  it("载入演示数据后图谱同时出现绿、黄、红三档，未学节点照旧标灰", async () => {
+    const core = createSynapseCore({
+      clock: { nowIso: () => `${TODAY}T09:00:00.000Z` },
+      idGen: testIdGen,
+    });
+    await core.loadDemoData();
+
+    const data = core.getKgMastery().data!;
+    expect(Number(data["mastered"])).toBeGreaterThan(0);
+    expect(Number(data["learning"])).toBeGreaterThan(0);
+    expect(Number(data["weak"])).toBeGreaterThan(0);
+    expect(Number(data["untouched"])).toBeGreaterThan(0);
+
+    const entries = data["entries"] as KnowledgeMasteryEntry[];
+    expect(entries).toHaveLength(core.store.kgNodes().length);
+
+    // 反复载入演示数据不该把已经推进过的卡片再推一遍
+    await core.loadDemoData();
+    expect(core.getKgMastery().data!["mastered"]).toBe(data["mastered"]);
   });
 });
 

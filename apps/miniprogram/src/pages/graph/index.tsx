@@ -18,20 +18,39 @@ interface GraphEdge {
   relation: string
 }
 
+interface MasteryEntry {
+  node_id: string
+  level: string
+  card_count: number
+  reason: string
+}
+
 const WIDTH = 335
 const HEIGHT = 420
-const COLORS: Record<string, string> = {
-  course: '#5b6cff',
-  topic: '#2f80ed',
-  strategy: '#d97706',
-  task: '#059669',
-  document: '#db2777'
+
+/** G1：环上节点按掌握度着色——静态结构图变成学情诊断图。 */
+const MASTERY_ORDER = ['mastered', 'learning', 'weak', 'untouched'] as const
+
+const MASTERY_COLORS: Record<string, string> = {
+  mastered: '#059669',
+  learning: '#d97706',
+  weak: '#dc2626',
+  untouched: '#cbd5e1'
+}
+
+const MASTERY_LABELS: Record<string, string> = {
+  mastered: '已掌握',
+  learning: '在学',
+  weak: '薄弱',
+  untouched: '未学'
 }
 
 export default function GraphPage() {
   const [nodes, setNodes] = useState<GraphNode[]>([])
   const [edges, setEdges] = useState<GraphEdge[]>([])
   const [selectedId, setSelectedId] = useState('')
+  const [mastery, setMastery] = useState<Record<string, MasteryEntry>>({})
+  const [counts, setCounts] = useState<Record<string, number>>({})
 
   const positions = useMemo(() => {
     const result = new Map<string, { x: number; y: number }>()
@@ -62,6 +81,20 @@ export default function GraphPage() {
     setNodes(nextNodes)
     setEdges((data['edges'] ?? []) as GraphEdge[])
     setSelectedId((current) => current || nextNodes[0]?.id || '')
+
+    const masteryData = (getCore().getKgMastery().data ?? {}) as Record<string, unknown>
+    const entries = (masteryData['entries'] ?? []) as MasteryEntry[]
+    const byNode: Record<string, MasteryEntry> = {}
+    for (const entry of entries) {
+      byNode[entry.node_id] = entry
+    }
+    setMastery(byNode)
+    setCounts({
+      mastered: Number(masteryData['mastered'] ?? 0),
+      learning: Number(masteryData['learning'] ?? 0),
+      weak: Number(masteryData['weak'] ?? 0),
+      untouched: Number(masteryData['untouched'] ?? 0)
+    })
   }
 
   useDidShow(load)
@@ -91,12 +124,29 @@ export default function GraphPage() {
   }, [edges, nodes, positions])
 
   const selected = nodes.find((node) => node.id === selectedId)
+  const selectedLevel = (selected && mastery[selected.id]?.level) || 'untouched'
 
   return (
     <View className={styles.page}>
       <View className={styles.summary}>
         <Text className={styles.title}>从你的资料里生长的学习路径</Text>
-        <Text className={styles.desc}>{nodes.length} 个节点 · {edges.length} 条关系</Text>
+        <Text className={styles.desc}>
+          {nodes.length} 个节点 · {edges.length} 条关系 · 颜色是掌握度
+        </Text>
+      </View>
+
+      <View className={styles.legend}>
+        {MASTERY_ORDER.map((level) => (
+          <View key={level} className={styles.legendItem}>
+            <View
+              className={styles.legendDot}
+              style={{ backgroundColor: MASTERY_COLORS[level] }}
+            />
+            <Text className={styles.legendText}>
+              {MASTERY_LABELS[level]} {counts[level] ?? 0}
+            </Text>
+          </View>
+        ))}
       </View>
 
       <View className={styles.graphStage}>
@@ -106,6 +156,7 @@ export default function GraphPage() {
           if (!point) {
             return null
           }
+          const level = mastery[node.id]?.level || 'untouched'
           return (
             <View
               key={node.id}
@@ -113,11 +164,14 @@ export default function GraphPage() {
               style={{
                 left: `${(point.x / WIDTH) * 100}%`,
                 top: `${(point.y / HEIGHT) * 100}%`,
-                backgroundColor: COLORS[node.category] || '#64748b'
+                backgroundColor: MASTERY_COLORS[level] || MASTERY_COLORS.untouched
               }}
               onClick={() => setSelectedId(node.id)}
             >
-              <Text className={styles.nodeText}>
+              <Text
+                className={styles.nodeText}
+                style={{ color: level === 'untouched' ? '#4f515a' : '#fff' }}
+              >
                 {node.name.length > 6 ? `${node.name.slice(0, 6)}…` : node.name}
               </Text>
             </View>
@@ -131,8 +185,22 @@ export default function GraphPage() {
           <View className={styles.tags}>
             <Text className={styles.tag}>{selected.category}</Text>
             <Text className={styles.tag}>{selected.subject || '未分类'}</Text>
+            <Text
+              className={styles.tag}
+              style={{
+                backgroundColor: MASTERY_COLORS[selectedLevel],
+                color: selectedLevel === 'untouched' ? '#4f515a' : '#fff'
+              }}
+            >
+              {MASTERY_LABELS[selectedLevel]}
+            </Text>
           </View>
           <Text className={styles.desc}>{selected.description || '暂无说明'}</Text>
+          <Text className={styles.desc}>
+            {mastery[selected.id]?.card_count
+              ? `依据 ${mastery[selected.id]!.card_count} 张复习卡判定：${mastery[selected.id]!.reason}`
+              : '这个知识点还没有对应的复习卡，先去资料库「一键学习化」把它变成复习卡。'}
+          </Text>
         </View>
       )}
     </View>

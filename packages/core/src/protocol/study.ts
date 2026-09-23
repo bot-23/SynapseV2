@@ -332,3 +332,33 @@ export interface ReviewItem {
   lapses: number;
   created_at: string;
 }
+
+/**
+ * 图谱节点的掌握度档位。
+ * 把「结构图」变成「学情诊断图」：同一个节点，红黄绿灰四档一眼看出学没学会。
+ */
+export type MasteryLevel = "weak" | "learning" | "mastered" | "untouched";
+
+/** 单个节点的掌握度（壳侧按 node_id 上色）。 */
+export interface KnowledgeMasteryEntry {
+  node_id: string;
+  level: MasteryLevel;
+  /** 关联到该节点的复习卡数量；0 就是「还没学过」 */
+  card_count: number;
+  /** 关联卡片的平均难度系数，没有卡片时为 0 */
+  avg_ease: number;
+  /** 关联卡片里最高的连续记住次数 */
+  max_repetitions: number;
+  /** 判定理由（人话，直接显示在图例/详情里） */
+  reason: string;
+}
+
+/** 整张图谱的掌握度总览。 */
+export interface KnowledgeMasterySnapshot {
+  entries: KnowledgeMasteryEntry[];
+  weak: number;
+  learning: number;
+  mastered: number;
+  untouched: number;
+  generated_at: string;
+}

@@ -29,6 +29,31 @@
   line-height: $line-height-normal;
 }
 
+/* G1：掌握度图例（红=薄弱、黄=在学、绿=掌握、灰=未学） */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-sm;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  margin-right: $spacing-md;
+}
+
+.legendDot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  margin-right: 8rpx;
+}
+
+.legendText {
+  color: $color-text-secondary;
+  font-size: $font-size-xs;
+}
+
 .graphStage {
   position: relative;
   width: 670rpx;

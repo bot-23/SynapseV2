@@ -16,6 +16,7 @@ import type {
   AssignmentItem,
   BlockPlan,
   DayBusySummary,
+  KnowledgeMasterySnapshot,
   ReviewItem,
   StudyPlanPayload,
   StudyPlanRequest,
@@ -24,6 +25,7 @@ import type {
   TodayItem,
   TodayPlan,
 } from "../protocol/study.js";
+import { compute_mastery, summarize_mastery } from "../domain/kgMastery.js";
 import {
   list_timetable_subjects,
   parse_timetable_text,
@@ -81,6 +83,19 @@ export interface SynapseCoreOptions {
   idGen?: IdGen;
   config?: Partial<ProviderConfig>;
 }
+
+/**
+ * 演示数据的掌握度评分序列（按知识点顺序轮转）。
+ * 依次落在「绿 / 绿 / 黄 / 黄 / 红」四档上：
+ * [5,5,5] 连对三次 → 掌握；[5,4,5] 也够绿；单次 [4] / [3] → 在学；连错三次 [2,2,2] → 薄弱。
+ */
+const DEMO_MASTERY_GRADES: ReadonlyArray<readonly number[]> = [
+  [5, 5, 5],
+  [5, 4, 5],
+  [4],
+  [3],
+  [2, 2, 2],
+];
 
 export class SynapseCore {
   readonly store: RuntimeStore;
@@ -370,6 +385,28 @@ export class SynapseCore {
       edges: this.store.kgEdges(),
       document_node_count: nodes.filter((node) => node.id.startsWith("doc_")).length,
     });
+  }
+
+  /**
+   * 图谱掌握度：把复习卡的 SM-2 状态聚合回节点，红黄绿灰四档。
+   * 只读、无副作用——诊断页多刷几次不应该改变任何状态。
+   */
+  getKgMastery(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const entries = compute_mastery(this.store.kgNodes(), this.store.get_reviews(userId || "default"));
+      const counts = summarize_mastery(entries);
+      const snapshot: KnowledgeMasterySnapshot = {
+        entries,
+        ...counts,
+        generated_at: this.clock.nowIso(),
+      };
+      return apiOk(
+        snapshot as unknown as Record<string, unknown>,
+        `掌握 ${counts.mastered} · 在学 ${counts.learning} · 薄弱 ${counts.weak} · 未学 ${counts.untouched}`,
+      );
+    } catch (error) {
+      return apiFail(`掌握度计算失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async buildKgFromDocument(
@@ -1211,6 +1248,8 @@ export class SynapseCore {
       }
 
       const graphResult = await this.buildKgFromDocument("demo-math-notes", uid);
+      // G1：让演示数据一进来就同时出现红/黄/绿三色，否则图谱是一片灰，诊断页白做。
+      this._seed_demo_mastery(uid, graphResult.data?.topic_nodes ?? [], startDate);
 
       // 演示数据 v2：作业式计划样例（2 条待办 + 1 条逾期），让「我必须交」这条链路一进来就能演示。
       const demoAssignments: AssignmentItem[] = [
@@ -1291,6 +1330,56 @@ export class SynapseCore {
       );
     } catch (error) {
       return apiFail(`载入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * G1：给演示数据铺一层「红黄绿同屏」的掌握度。
+   *
+   * 用 `apply_sm2` 真实推进卡片，而不是直接手写 ease/repetitions ——
+   * 演示里看到的颜色，就是线上规则算出来的颜色，不会出现「演示很好看、真用起来全灰」。
+   *
+   * 幂等的关键：只推进 `total_reviews === 0`（建卡后一次都没复习过）的卡。
+   * `loadDemoData` 允许被反复调用，推进过一次的卡再推就会越推越绿。
+   */
+  private _seed_demo_mastery(
+    userId: string,
+    topicNodes: ReadonlyArray<{ name: string; subject: string }>,
+    startDate: string,
+  ): void {
+    const reviews = this.store.get_reviews(userId);
+    const byKey = new Map(reviews.map((item) => [item.key, item]));
+    let changed = false;
+
+    topicNodes.forEach((node, index) => {
+      const key = review_key(node.subject, node.name);
+      let item = byKey.get(key);
+      if (!item) {
+        // 构图时通常已经顺手建过卡了；这里兜底，保证节点一定有一条可追踪的复习记录
+        item = create_review_item({
+          id: this.idGen.next(),
+          subject: node.subject,
+          topic: node.name,
+          today: startDate,
+        });
+        reviews.push(item);
+        byKey.set(key, item);
+        changed = true;
+      }
+      if (item.total_reviews > 0) {
+        return;
+      }
+      let advanced = item;
+      for (const grade of DEMO_MASTERY_GRADES[index % DEMO_MASTERY_GRADES.length]!) {
+        advanced = apply_sm2(advanced, grade, startDate);
+      }
+      reviews[reviews.indexOf(item)] = advanced;
+      byKey.set(key, advanced);
+      changed = true;
+    });
+
+    if (changed) {
+      this.store.save_reviews(userId, reviews);
     }
   }
 

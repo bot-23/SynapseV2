@@ -89,4 +89,35 @@ test.describe('完整用户旅程', () => {
     await page.locator('.plan-tab', { hasText: '复习' }).click()
     await expect(page.locator('.review-topic').first()).toBeVisible()
   })
+
+  test('图谱页按掌握度着色：演示数据一进来就有红黄绿，且能看到判定理由', async ({ page }) => {
+    await onboard(page)
+    await page.locator('.nav-item', { hasText: '我的' }).click()
+    await page.getByRole('button', { name: '载入演示数据' }).click()
+    await expect(page.locator('.notice.snackbar')).toContainText('演示数据已载入', {
+      timeout: 20_000,
+    })
+
+    await page.getByRole('button', { name: /知识图谱/ }).click()
+
+    // 四色图例齐全，且掌握 / 在学 / 薄弱都真的有节点（否则就是一片灰，热力图白做）
+    await expect(page.locator('.graph-legend-item')).toHaveCount(4)
+    const legend = page.locator('.graph-legend')
+    await expect(legend).toContainText(/已掌握 [1-9]/)
+    await expect(legend).toContainText(/在学 [1-9]/)
+    await expect(legend).toContainText(/薄弱 [1-9]/)
+
+    // 节点真的按掌握度上了色：至少两种不同填充色
+    const fills = await page
+      .locator('.graph-node circle')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('fill') ?? ''))
+    expect(new Set(fills).size).toBeGreaterThanOrEqual(2)
+
+    // 点中一个薄弱节点，详情里要能说清「为什么是红的」
+    const weakNode = page.locator('.graph-node circle[fill="#dc2626"]').first()
+    await expect(weakNode).toBeVisible()
+    await weakNode.click()
+    await expect(page.locator('.graph-detail')).toContainText('薄弱')
+    await expect(page.locator('.graph-detail')).toContainText('张复习卡判定')
+  })
 })
