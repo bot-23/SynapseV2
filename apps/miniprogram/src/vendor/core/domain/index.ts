@@ -69,6 +69,26 @@ export {
 export { pyRound } from "./pyCompat";
 export { add_days, days_between, to_date } from "./dateMath";
 export {
+  NARRATIVE_MAX_CHARS,
+  REPORT_HISTORY_LIMIT,
+  REPORT_WINDOW_DAYS,
+  build_offline_narrative,
+  collect_active_days,
+  completion_rate,
+  compute_ability_delta,
+  compute_streak,
+  count_overdue,
+  count_progress_window,
+  count_reviewed,
+  report_window,
+  summarize_weekly_report,
+  truncate_narrative,
+  type AssessmentRowLike,
+  type ProgressRowLike,
+  type ReviewRowLike,
+  type WeeklyReportInput,
+} from "./weeklyReport";
+export {
   DEFAULT_EASE,
   MAX_INTERVAL_DAYS,
   MIN_EASE,

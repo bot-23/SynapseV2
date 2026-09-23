@@ -15,6 +15,24 @@ interface DashboardView {
   plan: { version: number; updated_at: string }
 }
 
+interface WeeklyReportView {
+  id: string
+  created_at: string
+  narrative: string
+  degraded: boolean
+  stats: {
+    window_start: string
+    window_end: string
+    done_count: number
+    total_count: number
+    completion_rate: number
+    ability_delta: Record<string, number>
+    overdue_count: number
+    review_done: number
+    streak_days: number
+  }
+}
+
 export default function MinePage() {
   const [profile, setProfile] = useState<Record<string, unknown>>({})
   const [name, setName] = useState('')
@@ -32,6 +50,8 @@ export default function MinePage() {
   const [assignmentOverdue, setAssignmentOverdue] = useState(0)
   const [dashboard, setDashboard] = useState<DashboardView | null>(null)
   const [loadingDemo, setLoadingDemo] = useState(false)
+  const [report, setReport] = useState<WeeklyReportView | null>(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
   const runtime = currentRuntimeMode()
 
   const load = () => {
@@ -73,6 +93,11 @@ export default function MinePage() {
 
     const dashboardRes = getCore().getDashboard(DEFAULT_USER_ID)
     setDashboard((dashboardRes.data as unknown as DashboardView) ?? null)
+
+    const reportRes = getCore().listWeeklyReports(DEFAULT_USER_ID)
+    setReport(
+      ((reportRes.data as Record<string, unknown> | null)?.['latest'] ?? null) as WeeklyReportView | null
+    )
   }
 
   /** 科目表是排程的权威来源，识别错了必须能纠正，否则会一直按错科目排课。 */
@@ -157,6 +182,22 @@ export default function MinePage() {
       load()
     } finally {
       setLoadingDemo(false)
+    }
+  }
+
+  /** G3：现场生成一期学情周报（演示时可以直接点）。 */
+  const generateReport = async () => {
+    if (generatingReport) {
+      return
+    }
+    setGeneratingReport(true)
+    try {
+      const result = await getCore().generateWeeklyReport(DEFAULT_USER_ID)
+      console.log('[Synapse] 生成周报', result.success, result.message)
+      Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
+      load()
+    } finally {
+      setGeneratingReport(false)
     }
   }
 
@@ -247,6 +288,67 @@ export default function MinePage() {
             <Text className={styles.abilityLevel}>Lv.{subject.level}</Text>
           </View>
         ))}
+      </View>
+
+      <View className={styles.card}>
+        <Text className={styles.cardTitle}>AI 学情周报</Text>
+        <Text className={styles.cardDesc}>
+          完成率、能力值变化、逾期、复习与连续打卡都由本机离线算好，模型只负责把它写成一段学情叙述；没配
+          Key 也能出，只是换成模板文案并标注「离线模板」。
+        </Text>
+        {report ? (
+          <View>
+            <View className={styles.reportStats}>
+              <View className={styles.reportStat}>
+                <Text className={styles.reportValue}>
+                  {report.stats.done_count}/{report.stats.total_count}
+                </Text>
+                <Text className={styles.reportLabel}>本周完成</Text>
+              </View>
+              <View className={styles.reportStat}>
+                <Text className={styles.reportValue}>{report.stats.completion_rate}%</Text>
+                <Text className={styles.reportLabel}>完成率</Text>
+              </View>
+              <View className={styles.reportStat}>
+                <Text className={styles.reportValue}>{report.stats.overdue_count}</Text>
+                <Text className={styles.reportLabel}>逾期作业</Text>
+              </View>
+              <View className={styles.reportStat}>
+                <Text className={styles.reportValue}>{report.stats.review_done}</Text>
+                <Text className={styles.reportLabel}>本周复习</Text>
+              </View>
+              <View className={styles.reportStat}>
+                <Text className={styles.reportValue}>{report.stats.streak_days}</Text>
+                <Text className={styles.reportLabel}>连续打卡</Text>
+              </View>
+            </View>
+            {Object.keys(report.stats.ability_delta ?? {}).length > 0 && (
+              <View className={styles.reportAbilities}>
+                {Object.entries(report.stats.ability_delta).map(([subject, delta]) => (
+                  <Text key={subject} className={styles.reportAbility}>
+                    {subject} {delta > 0 ? `+${delta}` : delta}
+                  </Text>
+                ))}
+              </View>
+            )}
+            <View className={styles.reportNarrative}>
+              {report.degraded && <Text className={styles.reportFlag}>离线模板</Text>}
+              <Text className={styles.reportText}>{report.narrative}</Text>
+            </View>
+            <Text className={styles.reportWindow}>
+              统计窗口 {report.stats.window_start} ~ {report.stats.window_end}（本机最多保留 8 期）
+            </Text>
+          </View>
+        ) : (
+          <Text className={styles.feedback}>还没生成过周报，点下面的按钮现场生成一期。</Text>
+        )}
+        <Button
+          className={classnames(styles.demoButton, generatingReport && styles.buttonDisabled)}
+          disabled={generatingReport}
+          onClick={generateReport}
+        >
+          {generatingReport ? '生成中…' : report ? '重新生成本周周报' : '生成本周周报'}
+        </Button>
       </View>
 
       <View className={styles.card}>

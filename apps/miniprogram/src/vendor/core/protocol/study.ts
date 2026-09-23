@@ -394,3 +394,42 @@ export interface KnowledgeMasterySnapshot {
   untouched: number;
   generated_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// 学情周报（G3）
+// 数据→洞察的闭环：数字全部离线确定性算出来，模型只负责把它写成一段人话。
+// ---------------------------------------------------------------------------
+
+/** 一周学情统计。这里的每一个数字都由 core 算出来，不允许来自模型。 */
+export interface WeeklyReportStats {
+  /** 统计窗口起（含），YYYY-MM-DD */
+  window_start: string;
+  /** 统计窗口止（含），通常就是今天 */
+  window_end: string;
+  /** 窗口内完成任务数 */
+  done_count: number;
+  /** 窗口内动过的任务数（完成率的分母） */
+  total_count: number;
+  /** 完成率，整数百分比 0-100；没有可数任务时为 0 */
+  completion_rate: number;
+  /** 各科目能力值变化（窗口末 − 窗口初），只保留非 0 项，保留两位小数 */
+  ability_delta: Record<string, number>;
+  /** 当前逾期作业数 */
+  overdue_count: number;
+  /** 窗口内有复习记录的知识点条数 */
+  review_done: number;
+  /** 连续打卡天数（今天还没打卡时从昨天起算，不算断签） */
+  streak_days: number;
+}
+
+/** 一期学情周报。 */
+export interface WeeklyReport {
+  id: string;
+  user_id: string;
+  created_at: string;
+  stats: WeeklyReportStats;
+  /** 学情叙述（进步点 / 风险点 / 下周建议），不超过 200 字 */
+  narrative: string;
+  /** true = 这段叙述是离线模板拼的，没经过模型 */
+  degraded: boolean;
+}

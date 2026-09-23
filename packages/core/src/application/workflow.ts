@@ -63,6 +63,7 @@ import type { RuntimeStore } from "../storage/runtimeStore.js";
 import { ALL_TOOLS, toOpenaiTools } from "./tools.js";
 import { AssignmentService } from "./assignmentService.js";
 import { HintService } from "./hintService.js";
+import { ReportService } from "./reportService.js";
 import {
   buildConversationalReplyPrompt,
   buildIntentPrompt,
@@ -153,6 +154,11 @@ export class StudyPlanWorkflowService {
    */
   get hint_service(): HintService {
     return new HintService(this.runtime_store, this.providers.llm);
+  }
+
+  /** G3：学情周报服务。同样每次取用新建，保证拿到的一定是当前生效的模型。 */
+  get report_service(): ReportService {
+    return new ReportService(this.runtime_store, this.providers.llm, this.clock, this.idGen);
   }
 
   async build_study_plan(

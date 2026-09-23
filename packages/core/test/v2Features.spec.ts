@@ -49,6 +49,7 @@ import type {
   ReviewHintResult,
   StudyPlanRequest,
   TimetableEntry,
+  WeeklyReport,
 } from "../src/protocol/study.js";
 import type { StudyPilotRunRequest } from "../src/protocol/frontend.js";
 import { buildTeachPrompt } from "../src/application/prompts.js";
@@ -65,6 +66,12 @@ import {
   encode_assignment_pack,
 } from "../src/domain/assignmentPack.js";
 import { compute_mastery, summarize_mastery } from "../src/domain/kgMastery.js";
+import {
+  build_offline_narrative,
+  compute_streak,
+  report_window,
+  summarize_weekly_report,
+} from "../src/domain/weeklyReport.js";
 import {
   build_offline_hints,
   find_leaked_span,
@@ -2429,6 +2436,207 @@ describe("core v2：苏格拉底提示（G2）", () => {
       false,
     );
     expect(build_offline_hints("数学", "含参函数单调性")[0]).toContain("数学·含参函数单调性");
+  });
+});
+
+describe("core v2：学情周报（G3）", () => {
+  const TODAY = "2026-03-10";
+  const fixedClock = { nowIso: () => `${TODAY}T09:00:00.000Z` };
+
+  /** 造一条最小可用的作业项（只关心截止日与状态）。 */
+  function assignment(dueDate: string, status: AssignmentItem["status"]): AssignmentItem {
+    return {
+      id: `asg-${dueDate}-${status}`,
+      subject: "数学",
+      title: "第三章习题",
+      quantity: 20,
+      unit: "题",
+      due_date: dueDate,
+      estimated_minutes: 60,
+      status,
+      done_at: status === "done" ? dueDate : "",
+      created_at: "2026-03-01",
+      source_text: "数学第三章习题1-20，明天交",
+      review_card_ids: [],
+      plan_id: "",
+      plan_version: null,
+      original_due_date: "",
+      rescheduled_at: "",
+    };
+  }
+
+  /** 自称 deepseek 的假模型，吐一句固定叙述。 */
+  class ReportLlm implements LlmProvider {
+    readonly prompts: string[] = [];
+
+    constructor(private readonly reply: string) {}
+
+    describe(): Record<string, unknown> {
+      return { provider: "deepseek", model: "report-llm", status: "ready" };
+    }
+
+    async generateWithTools(): Promise<GenerateWithToolsResult> {
+      return { tool_calls: [] };
+    }
+
+    async generateText(prompt: string): Promise<string> {
+      this.prompts.push(prompt);
+      return this.reply;
+    }
+
+    async generateJson(): Promise<Record<string, unknown>> {
+      return {};
+    }
+
+    async *streamText(): AsyncIterable<string> {
+      yield "";
+    }
+  }
+
+  it("聚合数字全部离线手算可比：完成率、能力值变化、逾期、复习与连续打卡", () => {
+    const stats = summarize_weekly_report({
+      today: TODAY,
+      progress: {
+        a: { done: true, updated_at: "2026-03-10T10:00:00.000Z" },
+        b: { done: false, updated_at: "2026-03-05T10:00:00.000Z" },
+        // 窗口之前完成的一条：不进完成率分母，但算连续打卡
+        c: { done: true, updated_at: "2026-03-01T10:00:00.000Z" },
+        d: { done: true, updated_at: "2026-03-09T20:00:00.000Z" },
+      },
+      assessments: [
+        { subject: "数学", abilities_snapshot_json: '{"skill_score":1}', created_at: "2026-02-20" },
+        { subject: "数学", abilities_snapshot_json: '{"skill_score":1.4}', created_at: "2026-03-08" },
+        { subject: "数学", abilities_snapshot_json: '{"skill_score":1.8}', created_at: "2026-03-10" },
+        // 窗口内只有首末两条，且窗口前没有基线：退化为窗口内首末之差
+        { subject: "英语", abilities_snapshot_json: '{"skill_score":2}', created_at: "2026-03-06" },
+        { subject: "英语", abilities_snapshot_json: '{"skill_score":1.7}', created_at: "2026-03-09" },
+        // 只有窗口外的快照：不参与比较
+        { subject: "物理", abilities_snapshot_json: '{"skill_score":3}', created_at: "2026-02-01" },
+        // 首末一样：变化为 0，不该出现在结果里（避免叙述里全是「+0」）
+        { subject: "化学", abilities_snapshot_json: '{"skill_score":2}', created_at: "2026-03-07" },
+        { subject: "化学", abilities_snapshot_json: '{"skill_score":2}', created_at: "2026-03-08" },
+        // 脏数据：JSON 坏掉时跳过，不能把整份周报算崩
+        { subject: "生物", abilities_snapshot_json: "{oops", created_at: "2026-03-08" },
+      ],
+      reviews: [
+        { last_reviewed_at: "2026-03-09T21:00:00.000Z" },
+        { last_reviewed_at: "2026-03-01T21:00:00.000Z" },
+      ],
+      assignments: [
+        assignment("2026-03-08", "pending"),
+        assignment("2026-03-08", "done"),
+        assignment("2026-03-20", "pending"),
+      ],
+    });
+
+    expect(report_window(TODAY)).toEqual({ from: "2026-03-04", to: "2026-03-10" });
+    expect(stats.window_start).toBe("2026-03-04");
+    expect(stats.window_end).toBe(TODAY);
+    expect(stats.done_count).toBe(2);
+    expect(stats.total_count).toBe(3);
+    expect(stats.completion_rate).toBe(67);
+    expect(stats.ability_delta).toEqual({ 数学: 0.8, 英语: -0.3 });
+    expect(stats.overdue_count).toBe(1);
+    expect(stats.review_done).toBe(1);
+    // 今天、昨天连续打卡；再往前一天断掉
+    expect(stats.streak_days).toBe(2);
+    expect(compute_streak(["2026-03-08", "2026-03-09"], TODAY)).toBe(2);
+    expect(compute_streak([], TODAY)).toBe(0);
+  });
+
+  it("离线叙述用真实数字拼句子：每个数字都能在统计里找到出处", () => {
+    const stats = summarize_weekly_report({
+      today: TODAY,
+      progress: {
+        a: { done: true, updated_at: "2026-03-10T10:00:00.000Z" },
+        b: { done: false, updated_at: "2026-03-05T10:00:00.000Z" },
+        c: { done: true, updated_at: "2026-03-09T20:00:00.000Z" },
+      },
+      assessments: [
+        { subject: "数学", abilities_snapshot_json: '{"skill_score":1}', created_at: "2026-02-20" },
+        { subject: "数学", abilities_snapshot_json: '{"skill_score":1.4}', created_at: "2026-03-10" },
+      ],
+      reviews: [{ last_reviewed_at: "2026-03-09T21:00:00.000Z" }],
+      assignments: [assignment("2026-03-08", "pending")],
+    });
+    const narrative = build_offline_narrative(stats);
+
+    expect(narrative).toContain("本周你动过 3 项任务，完成 2 项，完成率 67%");
+    expect(narrative).toContain("数学 +0.4");
+    expect(narrative).toContain("还有 1 项作业逾期");
+    expect(narrative).toContain("本周复习了 1 个知识点，连续打卡 2 天");
+    expect(narrative.length).toBeLessThanOrEqual(200);
+
+    // 一条记录都没有时也要说人话，不能出现 NaN 或空串
+    const empty = build_offline_narrative(
+      summarize_weekly_report({
+        today: TODAY,
+        progress: {},
+        assessments: [],
+        reviews: [],
+        assignments: [],
+      }),
+    );
+    expect(empty).toContain("本周还没有任务完成记录");
+    expect(empty).not.toContain("NaN");
+  });
+
+  it("有 Key 时由模型写叙述，且提示词里带的是已经算好的数字", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.store.update_progress("default", "k1", true, "整理错题", "review");
+
+    const llm = new ReportLlm("本周你完成了 1 项任务，连续打卡 1 天，保持住。");
+    core.workflow.providers = { ...core.workflow.providers, llm };
+
+    const result = await core.generateWeeklyReport("default");
+    expect(result.success).toBe(true);
+    const report = result.data as unknown as WeeklyReport;
+    expect(report.degraded).toBe(false);
+    expect(report.narrative).toBe("本周你完成了 1 项任务，连续打卡 1 天，保持住。");
+    expect(report.stats.done_count).toBe(1);
+    expect(report.stats.window_end).toBe(TODAY);
+
+    // 数字由 core 算好再交给模型：提示词里必须出现这份统计
+    expect(llm.prompts[0]).toContain("完成任务：1 / 1 项（完成率 100%）");
+    expect(llm.prompts[0]).toContain("只能引用，绝对不能自己计算");
+  });
+
+  it("没配 Key 时降级为离线模板并标 degraded，数字仍与统计一致", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.store.update_progress("default", "k1", true, "整理错题", "review");
+
+    const result = await core.generateWeeklyReport("default");
+    const report = result.data as unknown as WeeklyReport;
+    expect(report.degraded).toBe(true);
+    expect(report.narrative).toContain("完成率 100%");
+    expect(result.message).toContain("离线模板");
+  });
+
+  it("周报历史只保留最近 8 期，且新键进了导出与清空清单", async () => {
+    const core = createSynapseCore({ clock: fixedClock, idGen: testIdGen });
+    core.store.update_progress("default", "k1", true, "整理错题", "review");
+
+    const ids: string[] = [];
+    for (let index = 0; index < 9; index += 1) {
+      const generated = await core.generateWeeklyReport("default");
+      ids.push((generated.data as unknown as WeeklyReport).id);
+    }
+    const listed = core.listWeeklyReports("default");
+    const payload = listed.data as unknown as { reports: WeeklyReport[]; count: number };
+    expect(payload.count).toBe(8);
+    expect(payload.reports).toHaveLength(8);
+    // 第 1 期已被裁掉，留下的正是第 2～9 期
+    expect(payload.reports[0]!.id).toBe(ids[1]);
+    expect(payload.reports[7]!.id).toBe(ids[8]);
+
+    const exported = core.exportData("default").data as unknown as {
+      data: Record<string, unknown>;
+    };
+    expect(Array.isArray(exported.data["reports:default"])).toBe(true);
+    expect((exported.data["reports:default"] as unknown[]).length).toBe(8);
+
+    core.deleteAllUserData("default");
+    expect(core.store.get_reports("default")).toEqual([]);
   });
 });
 

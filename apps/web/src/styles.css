@@ -2729,6 +2729,81 @@ svg {
   font-size: 11px;
 }
 
+/* ---- 学情周报（G3） ---- */
+.report-stats {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-stat {
+  flex: 1 1 72px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--warm-gray);
+  border-radius: var(--radius-md);
+}
+
+.report-value {
+  color: var(--brand);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.report-label {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.report-abilities {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-ability {
+  padding: 2px 8px;
+  color: var(--brand);
+  font-size: 10.5px;
+  font-weight: 650;
+  background: var(--brand-light);
+  border: 1px solid var(--brand-subtle);
+  border-radius: var(--radius-full);
+}
+
+.report-narrative {
+  margin-top: 10px;
+  padding: 10px 12px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.7;
+  background: #fff;
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius-sm);
+}
+
+.report-flag {
+  margin-right: 6px;
+  padding: 1px 8px;
+  color: #b45309;
+  font-size: 10.5px;
+  font-weight: 650;
+  background: #fef3c7;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: var(--radius-full);
+}
+
+.report-window {
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
 /* ---- 作业式计划（F3） ---- */
 .assignment-hint {
   padding: 10px 14px;

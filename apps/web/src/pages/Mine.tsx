@@ -15,6 +15,24 @@ interface DashboardView {
   plan: { version: number; updated_at: string }
 }
 
+interface WeeklyReportView {
+  id: string
+  created_at: string
+  narrative: string
+  degraded: boolean
+  stats: {
+    window_start: string
+    window_end: string
+    done_count: number
+    total_count: number
+    completion_rate: number
+    ability_delta: Record<string, number>
+    overdue_count: number
+    review_done: number
+    streak_days: number
+  }
+}
+
 export default function MineView({ onOpenGraph }: MineViewProps) {
   const [profile, setProfile] = useState<Record<string, unknown>>({})
   const [name, setName] = useState('')
@@ -31,6 +49,8 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
   const [dashboard, setDashboard] = useState<DashboardView | null>(null)
   const [notice, setNotice] = useState('')
   const [loadingDemo, setLoadingDemo] = useState(false)
+  const [report, setReport] = useState<WeeklyReportView | null>(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
   const runtime = currentRuntimeMode()
 
   const flash = (message: string) => {
@@ -72,6 +92,11 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
 
     const dashboardRes = getCore().getDashboard(DEFAULT_USER_ID)
     setDashboard((dashboardRes.data as unknown as DashboardView) ?? null)
+
+    const reportRes = getCore().listWeeklyReports(DEFAULT_USER_ID)
+    setReport(
+      ((reportRes.data as Record<string, unknown> | null)?.['latest'] ?? null) as WeeklyReportView | null,
+    )
   }
 
   useEffect(() => {
@@ -150,6 +175,22 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
       load()
     } finally {
       setLoadingDemo(false)
+    }
+  }
+
+  /** G3：现场生成一期学情周报（演示时可以直接点）。 */
+  const generateReport = async () => {
+    if (generatingReport) {
+      return
+    }
+    setGeneratingReport(true)
+    try {
+      const result = await getCore().generateWeeklyReport(DEFAULT_USER_ID)
+      console.log('[Synapse] 生成周报', result.success, result.message)
+      flash(result.message)
+      load()
+    } finally {
+      setGeneratingReport(false)
     }
   }
 
@@ -234,6 +275,68 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mine-card">
+        <div className="card-title">AI 学情周报</div>
+        <div className="card-desc">
+          完成率、能力值变化、逾期、复习与连续打卡都由本机离线算好，模型只负责把它写成一段学情叙述；
+          没配 Key 也能出，只是换成模板文案并标注「离线模板」。
+        </div>
+        {report ? (
+          <>
+            <div className="report-stats">
+              <div className="report-stat">
+                <span className="report-value">
+                  {report.stats.done_count}/{report.stats.total_count}
+                </span>
+                <span className="report-label">本周完成</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{report.stats.completion_rate}%</span>
+                <span className="report-label">完成率</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{report.stats.overdue_count}</span>
+                <span className="report-label">逾期作业</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{report.stats.review_done}</span>
+                <span className="report-label">本周复习</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{report.stats.streak_days}</span>
+                <span className="report-label">连续打卡</span>
+              </div>
+            </div>
+            {Object.keys(report.stats.ability_delta ?? {}).length > 0 && (
+              <div className="report-abilities">
+                {Object.entries(report.stats.ability_delta).map(([subject, delta]) => (
+                  <span key={subject} className="report-ability">
+                    {subject} {delta > 0 ? `+${delta}` : delta}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="report-narrative">
+              {report.degraded && <span className="report-flag">离线模板</span>}
+              <span>{report.narrative}</span>
+            </div>
+            <div className="report-window">
+              统计窗口 {report.stats.window_start} ~ {report.stats.window_end}（本机最多保留 8 期）
+            </div>
+          </>
+        ) : (
+          <div className="feedback">还没生成过周报，点下面的按钮现场生成一期。</div>
+        )}
+        <button
+          type="button"
+          className="primary-button"
+          onClick={generateReport}
+          disabled={generatingReport}
+        >
+          {generatingReport ? '生成中…' : report ? '重新生成本周周报' : '生成本周周报'}
+        </button>
       </div>
 
       <div className="mine-card">

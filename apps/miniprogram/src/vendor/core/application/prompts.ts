@@ -2,11 +2,12 @@
  * 提示词拼装（翻译自 Synapse/backend/app/services/workflow.py，文案逐字保留）。
  */
 
-import type { StudyPlanRequest } from "../protocol/study";
+import type { StudyPlanRequest, WeeklyReportStats } from "../protocol/study";
 import {
   allocate_context_budget,
   collect_document_hits,
 } from "../domain/contextBudget";
+import { NARRATIVE_MAX_CHARS } from "../domain/weeklyReport";
 
 export function buildPlanPrompt(
   payload: StudyPlanRequest,
@@ -290,5 +291,35 @@ JSON 格式必须为：
 - 每一档只比上一档多给一点，绝不能提前把后面档位该说的说出来。
 - 禁止出现标准答案里的原句、公式结论、最终数值。
 - 每条提示不超过 60 字，用「你」称呼学生，语气像同伴而不是考官。
+`.trim();
+}
+
+/**
+ * G3 学情周报：把已经算好的统计喂给模型，让它写一段学情叙述。
+ *
+ * 关键约束：数字全部由 core 离线算好，模型**只能引用、不能计算、不能编造**。
+ * 一旦允许模型自己算，周报就成了「看起来很像真的」的幻觉 —— 那比不出周报更糟。
+ */
+export function buildWeeklyReportPrompt(stats: WeeklyReportStats): string {
+  const abilityLines = Object.keys(stats.ability_delta).length
+    ? Object.entries(stats.ability_delta)
+        .map(([subject, delta]) => `  - ${subject}：${delta > 0 ? "+" : ""}${delta}`)
+        .join("\n")
+    : "  - （本周没有可用于对比的能力值快照）";
+
+  return `
+你是一个学习教练，正在给学生写本周学情周报。
+下面这些数字已经由系统统计好，**只能引用，绝对不能自己计算或修改，也不要编造任何新数字**：
+
+- 统计窗口：${stats.window_start} ~ ${stats.window_end}
+- 完成任务：${stats.done_count} / ${stats.total_count} 项（完成率 ${stats.completion_rate}%）
+- 能力值变化：
+${abilityLines}
+- 当前逾期作业：${stats.overdue_count} 项
+- 本周复习过的知识点：${stats.review_done} 个
+- 连续打卡：${stats.streak_days} 天
+
+请写一段不超过 ${NARRATIVE_MAX_CHARS} 字的中文叙述，按「进步点 → 风险点 → 下周建议」的顺序讲，直接输出正文，不要标题、不要 Markdown、不要列表符号。
+语气像同伴，具体到数字，不给空洞的鼓励；没有数据的维度就不要提。
 `.trim();
 }

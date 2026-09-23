@@ -14,6 +14,7 @@ import type {
   SavedPlanMeta,
   TimetableEntry,
   TodayPlan,
+  WeeklyReport,
 } from "../protocol/study";
 import type { KvStore } from "./kv";
 import { SEED_KG_EDGES, SEED_KG_NODES, type KnowledgeEdge, type KnowledgeNode } from "./kgSeed";
@@ -330,6 +331,12 @@ export class RuntimeStore {
       created_at: this.now(),
     });
     this.kv.set(key, rows);
+  }
+
+  /** 读取能力评测快照（周报用它算各科目的能力值变化）。 */
+  get_assessments(): AssessmentRecord[] {
+    const rows = this.readJson<AssessmentRecord[]>("assessments:default", []);
+    return Array.isArray(rows) ? rows : [];
   }
 
   // ------------------------------------------------------------------
@@ -1045,6 +1052,39 @@ export class RuntimeStore {
   }
 
   // ------------------------------------------------------------------
+  // 学情周报（G3）
+  // ------------------------------------------------------------------
+
+  /** 读取周报历史（按生成时间正序，最新一期在最后）。 */
+  get_reports(userId: string): WeeklyReport[] {
+    const rows = this.readJson<Array<Record<string, unknown>>>(`reports:${userId}`, []);
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    // G3 新键：旧数据或手工写入的残缺行在读取侧补默认值，不做迁移
+    return rows
+      .filter((row) => row && typeof row === "object")
+      .map((row) => ({
+        id: String(row["id"] ?? ""),
+        user_id: String(row["user_id"] ?? userId),
+        created_at: String(row["created_at"] ?? ""),
+        stats: (row["stats"] ?? {}) as WeeklyReport["stats"],
+        narrative: String(row["narrative"] ?? ""),
+        degraded: Boolean(row["degraded"]),
+      }))
+      .filter((row) => row.id);
+  }
+
+  /** 覆盖写入周报列表。保留期数由调用方（ReportService）按域常量裁剪。 */
+  save_reports(userId: string, reports: WeeklyReport[]): WeeklyReport[] {
+    this.kv.set(
+      `reports:${userId}`,
+      reports.map((report) => ({ ...report })),
+    );
+    return this.get_reports(userId);
+  }
+
+  // ------------------------------------------------------------------
   // 数据导出
   // ------------------------------------------------------------------
 
@@ -1066,6 +1106,7 @@ export class RuntimeStore {
       `documents:${uid}`,
       `assignments:${uid}`,
       `timetable:${uid}`,
+      `reports:${uid}`,
     ]) {
       data[key] = this.kv.get(key) ?? null;
     }
@@ -1111,6 +1152,7 @@ export class RuntimeStore {
     this.kv.delete(`review:${userId}`);
     this.kv.delete(`documents:${userId}`);
     this.kv.delete(`assignments:${userId}`);
+    this.kv.delete(`reports:${userId}`);
     // 当前产品是单本地用户；清空用户数据时移除资料生成的图谱，只保留内置知识。
     this.kv.set(KEY_KG_NODES, SEED_KG_NODES);
     this.kv.set(KEY_KG_EDGES, SEED_KG_EDGES);

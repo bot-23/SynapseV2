@@ -73,6 +73,7 @@ import { SettingsService } from "./settings.js";
 import { StudyPlanWorkflowService } from "./workflow.js";
 import { AssignmentService } from "./assignmentService.js";
 import { KgBuilder, type KgBuildResult } from "./kgBuilder.js";
+import { ReportService } from "./reportService.js";
 
 export interface SynapseCoreOptions {
   kv?: KvStore;
@@ -1471,6 +1472,11 @@ export class SynapseCore {
     return this.workflow.assignment_service;
   }
 
+  /** G3：周报服务同样每次取用新建，保证拿到的是当前生效的模型。 */
+  private get reports(): ReportService {
+    return this.workflow.report_service;
+  }
+
   /** 作业看板：清单 + 已按截止日摊好的日程（壳侧只读渲染）。 */
   listAssignments(userId = "default"): ApiResponse<Record<string, unknown>> {
     try {
@@ -1664,6 +1670,38 @@ export class SynapseCore {
       });
     } catch (error) {
       return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * G3：生成本周学情周报。
+   *
+   * 数字全部离线算好（`domain/weeklyReport.ts`），模型只负责把它写成一段人话；
+   * 没配 Key 或调用失败时用模板拼真实数字并标 `degraded` —— 宁可口吻朴素，也不能编造。
+   */
+  async generateWeeklyReport(userId = "default"): Promise<ApiResponse<Record<string, unknown>>> {
+    try {
+      const report = await this.reports.generate(userId || "default");
+      const message = report.degraded
+        ? "周报已生成（离线模板：没配模型 Key 或调用失败，数字仍是真实统计）"
+        : "周报已生成";
+      return apiOk(report as unknown as Record<string, unknown>, message);
+    } catch (error) {
+      return apiFail(`周报生成失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 周报历史（最新一期在最后），最多 8 期。 */
+  listWeeklyReports(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const reports = this.reports.list(userId || "default");
+      return apiOk({
+        reports,
+        count: reports.length,
+        latest: reports.length ? reports[reports.length - 1] : null,
+      });
+    } catch (error) {
+      return apiFail(`周报读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
