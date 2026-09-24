@@ -1,8 +1,10 @@
+/* 页面级底色与文字色：与 styles/theme.scss 的 $color-bg-page / $color-text-primary 一致。
+   app.scss 是全局样式入口，这里写死字面量避免额外的 @use 解析路径依赖。 */
 page {
-  background: #f4f5fa;
+  background: #f2f5f8;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
-  color: #1d2129;
+  color: #1a2334;
   box-sizing: border-box;
 }
 

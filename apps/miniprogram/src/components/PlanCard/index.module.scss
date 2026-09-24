@@ -40,7 +40,7 @@
 .aiBadge {
   font-size: $font-size-xs;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.1);
+  background: rgba(19, 34, 57, 0.1);
   border-radius: $radius-xs;
   padding: 2rpx 10rpx;
   margin-left: $spacing-xs;
@@ -65,7 +65,7 @@
   display: block;
   font-size: $font-size-xs;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.08);
+  background: rgba(19, 34, 57, 0.08);
   border-radius: $radius-xs;
   padding: 6rpx 12rpx;
   margin-top: $spacing-sm;
@@ -103,7 +103,7 @@
 .evidenceToggle {
   font-size: $font-size-xs;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   border-radius: $radius-button;
   line-height: 2.2;
 }
@@ -147,7 +147,7 @@
 .evidenceItem {
   margin-top: $spacing-xs;
   padding-left: $spacing-xs;
-  border-left: 4rpx solid rgba(91, 108, 255, 0.24);
+  border-left: 4rpx solid rgba(19, 34, 57, 0.24);
 }
 
 .evidenceName {
@@ -181,7 +181,7 @@
   font-size: $font-size-xs;
   font-weight: $font-weight-semibold;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   border-radius: $radius-xs;
   padding: 2rpx 12rpx;
   margin-right: $spacing-sm;
@@ -202,7 +202,7 @@
 
 .subjectChip {
   display: inline-block;
-  background: rgba(91, 108, 255, 0.1);
+  background: rgba(19, 34, 57, 0.1);
   border-radius: $radius-xs;
   padding: 2rpx 14rpx;
   margin-bottom: 4rpx;

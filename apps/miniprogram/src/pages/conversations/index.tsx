@@ -60,7 +60,7 @@ export default function ConversationsPage() {
       title: '删除对话',
       content: `确定删除「${row.title}」及其全部消息吗？`,
       confirmText: '删除',
-      confirmColor: '#f53f3f'
+      confirmColor: '#dc2626'
     })
     if (!confirmResult.confirm) {
       return

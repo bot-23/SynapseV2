@@ -1,7 +1,6 @@
 /**
  * 规则计划服务（纯函数，无 IO）。
- * 翻译自 Synapse/backend/app/domain/rule_plans.py，语义逐字保留；
- * 输出以 baseline/golden/domain_rule_plan.json、domain_helpers.json 为冻结基线。
+ * 翻译自 Synapse/backend/app/domain/rule_plans.py，语义逐字保留。
  */
 
 import type {

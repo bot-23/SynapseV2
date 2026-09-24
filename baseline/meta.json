@@ -1,7 +1,0 @@
-{
-  "python": "3.12.13",
-  "fastapi": "0.137.2",
-  "old_repo": "C:\\Users\\23\\Desktop\\items\\Synapse",
-  "api_prefix": "/api/v1",
-  "note": "假 Key / Mock LLM / 临时数据目录；uuid 与时间戳已归一化"
-}

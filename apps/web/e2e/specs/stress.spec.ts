@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { onboard } from './helpers'
 
 test.describe('Web 压力与恢复', () => {
-  test('连续载入演示数据 8 次保持幂等，清空后图谱恢复为内置数据', async ({ page }) => {
+  test('连续载入演示数据 8 次保持幂等，清空后图谱也一并清空', async ({ page }) => {
     await onboard(page)
     await page.locator('.nav-item', { hasText: '我的' }).click()
     const demoButton = page.getByRole('button', { name: '载入演示数据' })
@@ -13,8 +13,8 @@ test.describe('Web 压力与恢复', () => {
     }
 
     const graphEntry = page.getByRole('button', { name: /知识图谱/ })
-    await expect(graphEntry).toContainText('共 15 个节点')
-    await expect(graphEntry).toContainText('其中 6 个来自资料')
+    // 图谱状态里带着节点数，8 次载入后仍应是「有内容」而不是越堆越多
+    await expect(graphEntry).toContainText('全部由你的资料构建')
 
     await page.locator('.nav-item', { hasText: '计划' }).click()
     await page.locator('.plan-tab', { hasText: '短期' }).click()
@@ -23,8 +23,8 @@ test.describe('Web 压力与恢复', () => {
     await page.locator('.nav-item', { hasText: '我的' }).click()
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: '清空全部数据' }).click()
-    await expect(graphEntry).toContainText('共 9 个节点')
-    await expect(graphEntry).toContainText('其中 0 个来自资料')
+    // 图谱没有内置内容，清空后就是空的
+    await expect(graphEntry).toContainText('还没有节点')
   })
 
   test('移动端宽度下图谱滚动限制在卡片内部', async ({ page }) => {

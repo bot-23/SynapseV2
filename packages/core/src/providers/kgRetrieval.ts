@@ -1,15 +1,15 @@
 /**
  * 知识图谱检索 Provider（重写自 Synapse/db/retrieval.py 的 SQLRetrievalProvider）。
- * 9 节点 10 边规模，手写邻接查询，数据存 KV 桶（kg:nodes / kg:edges）。
+ * 图谱内容全部来自用户资料与计划（存 KV 桶 kg:nodes / kg:edges），新装时为空。
  *
- * 行为对齐要点（以 baseline golden 为准）：
- * - 排序：(-score, topic 优先, name 码点序)，稳定排序，节点保持种子插入序。
+ * 行为要点：
+ * - 排序：(-score, topic 优先, name 码点序)，稳定排序，节点保持写入序。
  * - 邻接节点名：邻接 id 按字典序排列后映射名称（与旧库 SQLite 主键索引扫描序一致）。
  * - 路径：双向 BFS，边按插入序入邻接表，最深 4 层。
  */
 
 import type { RuntimeStore } from "../storage/runtimeStore.js";
-import type { KnowledgeNode } from "../storage/kgSeed.js";
+import type { KnowledgeNode } from "../storage/kgTypes.js";
 import type { RetrievalProvider } from "./contracts.js";
 
 interface RankedNode {
@@ -33,9 +33,7 @@ function normalizeText(value: unknown): string {
 const STOP_WORDS = new Set(["每天", "分钟", "同学", "计划", "模式", "生成", "一个", "怎么", "安排"]);
 
 export class KgRetrievalProvider implements RetrievalProvider {
-  constructor(private readonly store: RuntimeStore) {
-    this.store.ensureKgSeeded();
-  }
+  constructor(private readonly store: RuntimeStore) {}
 
   search(query: string): string[] {
     const [nodeCount, edgeCount] = this.summaryCounts();
@@ -180,14 +178,11 @@ export class KgRetrievalProvider implements RetrievalProvider {
   }
 
   private buildLearningPath(nodeIds: string[]): string[] {
-    if (!nodeIds.length) {
+    if (nodeIds.length < 2) {
       return [];
     }
 
-    let path = this.findPath("course_math_hs", nodeIds[0]!);
-    if (!path && nodeIds.length >= 2) {
-      path = this.findPath(nodeIds[0]!, nodeIds[1]!);
-    }
+    const path = this.findPath(nodeIds[0]!, nodeIds[1]!);
     if (!path) {
       return [];
     }

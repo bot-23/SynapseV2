@@ -40,12 +40,12 @@ export default function MinePage() {
   const [apiKey, setApiKey] = useState('')
   const [checking, setChecking] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [keyFormOpen, setKeyFormOpen] = useState(false)
   const [deepseekConfigured, setDeepseekConfigured] = useState(false)
   const [kgSummary, setKgSummary] = useState<Record<string, unknown>>({})
   const [timetableCount, setTimetableCount] = useState(0)
   const [subjects, setSubjects] = useState<Array<{ name: string; source: string }>>([])
   const [documentCount, setDocumentCount] = useState(0)
-  const [documentNodeCount, setDocumentNodeCount] = useState(0)
   const [assignmentCount, setAssignmentCount] = useState(0)
   const [assignmentOverdue, setAssignmentOverdue] = useState(0)
   const [dashboard, setDashboard] = useState<DashboardView | null>(null)
@@ -69,10 +69,6 @@ export default function MinePage() {
 
     const kgRes = getCore().getGraphSummary()
     setKgSummary((kgRes.data ?? {}) as Record<string, unknown>)
-    const graphRes = getCore().getKnowledgeGraph()
-    setDocumentNodeCount(
-      Number((graphRes.data as Record<string, unknown> | null)?.['document_node_count'] ?? 0)
-    )
 
     const timetableRes = getCore().getTimetable(DEFAULT_USER_ID)
     setTimetableCount(Number((timetableRes.data as Record<string, unknown> | null)?.['total'] ?? 0))
@@ -144,6 +140,7 @@ export default function MinePage() {
       console.log('[Synapse] Key 已保存', saved.message)
       setFeedback(saved.message)
       setApiKey('')
+      setKeyFormOpen(false)
       load()
     } catch (error) {
       console.error('[Synapse] Key 校验异常', error)
@@ -158,7 +155,7 @@ export default function MinePage() {
       title: '清空全部数据',
       content: '将删除画像、计划、进度、课程表与 API Key，且不可恢复。确定继续吗？',
       confirmText: '清空',
-      confirmColor: '#f53f3f'
+      confirmColor: '#dc2626'
     })
     if (!confirmResult.confirm) {
       return
@@ -231,6 +228,8 @@ export default function MinePage() {
     environmentVersion === 'trial'
 
   const nameLocked = Boolean(profile['display_name'])
+  const nodeCount = Number(kgSummary['node_count'] ?? 0)
+  const edgeCount = Number(kgSummary['edge_count'] ?? 0)
 
   return (
     <View className={styles.page}>
@@ -250,6 +249,8 @@ export default function MinePage() {
           </Text>
         </View>
       </View>
+
+      <Text className={styles.groupTitle}>今日状态</Text>
 
       <View className={styles.card}>
         <Text className={styles.cardTitle}>学习仪表盘</Text>
@@ -351,33 +352,7 @@ export default function MinePage() {
         </Button>
       </View>
 
-      <View className={styles.card}>
-        <Text className={styles.cardTitle}>学习画像</Text>
-        <Text className={styles.cardDesc}>年级与姓名会用于调整计划的语气和难度描述。</Text>
-        <Text className={styles.fieldLabel}>姓名{nameLocked ? '（已设定，不可修改）' : ''}</Text>
-        {nameLocked ? (
-          <View className={styles.fieldValue}>
-            <Text>{String(profile['display_name'])}</Text>
-          </View>
-        ) : (
-          <Input
-            className={styles.input}
-            placeholder="给自己起个名字"
-            value={name}
-            onInput={(event) => setName(String(event.detail.value))}
-          />
-        )}
-        <Text className={styles.fieldLabel}>年级</Text>
-        <Input
-          className={styles.input}
-          placeholder="例如：大二"
-          value={grade}
-          onInput={(event) => setGrade(String(event.detail.value))}
-        />
-        <Button className={styles.primaryButton} onClick={saveProfile}>
-          保存画像
-        </Button>
-      </View>
+      <Text className={styles.groupTitle}>学习资产</Text>
 
       <View className={styles.card}>
         <Text className={styles.cardTitle}>我的科目</Text>
@@ -398,45 +373,6 @@ export default function MinePage() {
             </View>
           </View>
         ))}
-      </View>
-
-      <View className={styles.card}>
-        <Text className={styles.cardTitle}>DeepSeek API Key</Text>
-        <Text className={styles.cardDesc}>
-          Key 只保存在本设备，设备直连模型商，不经过任何中间服务器。保存前会先发一次真实请求校验。
-        </Text>
-        <Input
-          className={styles.input}
-          password
-          placeholder={deepseekConfigured ? '已配置，输入新 Key 可覆盖' : 'sk-...'}
-          value={apiKey}
-          onInput={(event) => {
-            setApiKey(String(event.detail.value))
-            setFeedback('')
-          }}
-        />
-        {!!feedback && <Text className={styles.feedback}>{feedback}</Text>}
-        <Button
-          className={classnames(styles.primaryButton, checking && styles.buttonDisabled)}
-          disabled={checking}
-          onClick={checkAndSaveKey}
-        >
-          {checking ? '正在校验…' : '校验并保存'}
-        </Button>
-      </View>
-
-      <View
-        className={styles.card}
-        onClick={() => Taro.navigateTo({ url: '/pages/cloudcheck/index' })}
-      >
-        <View className={styles.rowBetween}>
-          <Text className={styles.cardTitle}>云开发 AI 自检</Text>
-          <Text className={styles.rowArrow}>›</Text>
-        </View>
-        <Text className={styles.cardDesc}>
-          试用微信云开发 AI+（wx.cloud.extend.AI）：由云开发代发模型请求，不用配服务器域名白名单，也不用自己填
-          Key。先在这里验证它支持哪些能力。
-        </Text>
       </View>
 
       <View
@@ -493,8 +429,98 @@ export default function MinePage() {
           <Text className={styles.rowArrow}>›</Text>
         </View>
         <Text className={styles.cardDesc}>
-          共 {String(kgSummary['node_count'] ?? '-')} 个节点、
-          {String(kgSummary['edge_count'] ?? '-')} 条边，其中 {documentNodeCount} 个来自资料。
+          {nodeCount > 0
+            ? `共 ${nodeCount} 个节点、${edgeCount} 条边，全部由你的资料构建。`
+            : '还没有节点。导入资料并在资料库里点「构建图谱」，知识点和它们的关系会长在这里。'}
+        </Text>
+      </View>
+
+      <Text className={styles.groupTitle}>设置</Text>
+
+      <View className={styles.card}>
+        <Text className={styles.cardTitle}>学习画像</Text>
+        <Text className={styles.cardDesc}>年级与姓名会用于调整计划的语气和难度描述。</Text>
+        <Text className={styles.fieldLabel}>姓名{nameLocked ? '（已设定，不可修改）' : ''}</Text>
+        {nameLocked ? (
+          <View className={styles.fieldValue}>
+            <Text>{String(profile['display_name'])}</Text>
+          </View>
+        ) : (
+          <Input
+            className={styles.input}
+            placeholder="给自己起个名字"
+            value={name}
+            onInput={(event) => setName(String(event.detail.value))}
+          />
+        )}
+        <Text className={styles.fieldLabel}>年级</Text>
+        <Input
+          className={styles.input}
+          placeholder="例如：大二"
+          value={grade}
+          onInput={(event) => setGrade(String(event.detail.value))}
+        />
+        <Button className={styles.primaryButton} onClick={saveProfile}>
+          保存画像
+        </Button>
+      </View>
+
+      <View className={styles.card}>
+        <View className={styles.rowBetween}>
+          <Text className={styles.cardTitle}>AI 模型接入</Text>
+          <View
+            className={styles.linkButton}
+            onClick={() => {
+              setKeyFormOpen((open) => !open)
+              setFeedback('')
+            }}
+          >
+            <Text className={styles.linkButtonText}>
+              {keyFormOpen ? '收起' : deepseekConfigured ? '更换 Key' : '配置 Key'}
+            </Text>
+          </View>
+        </View>
+        <Text className={styles.cardDesc}>
+          {deepseekConfigured
+            ? '已接入 DeepSeek。Key 只保存在本设备，设备直连模型商，不经过任何中间服务器。'
+            : '当前用本地规则模式：不填 Key 也能用，填上之后理解和表达会更贴近你的说法。'}
+        </Text>
+        {keyFormOpen && (
+          <View>
+            <Input
+              className={styles.input}
+              password
+              placeholder={deepseekConfigured ? '输入新 Key 可覆盖' : 'sk-...'}
+              value={apiKey}
+              onInput={(event) => {
+                setApiKey(String(event.detail.value))
+                setFeedback('')
+              }}
+            />
+            {!!feedback && <Text className={styles.feedback}>{feedback}</Text>}
+            <Button
+              className={classnames(styles.primaryButton, checking && styles.buttonDisabled)}
+              disabled={checking}
+              onClick={checkAndSaveKey}
+            >
+              {checking ? '正在校验…' : '校验并保存'}
+            </Button>
+          </View>
+        )}
+        {!keyFormOpen && !!feedback && <Text className={styles.feedback}>{feedback}</Text>}
+      </View>
+
+      <View
+        className={styles.card}
+        onClick={() => Taro.navigateTo({ url: '/pages/cloudcheck/index' })}
+      >
+        <View className={styles.rowBetween}>
+          <Text className={styles.cardTitle}>云开发 AI 自检</Text>
+          <Text className={styles.rowArrow}>›</Text>
+        </View>
+        <Text className={styles.cardDesc}>
+          试用微信云开发 AI+（wx.cloud.extend.AI）：由云开发代发模型请求，不用配服务器域名白名单，也不用自己填
+          Key。先在这里验证它支持哪些能力。
         </Text>
       </View>
 

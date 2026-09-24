@@ -2229,8 +2229,7 @@ export class StudyPlanWorkflowService {
    * 后者要检查网络或域名白名单，所以分开写。
    */
   private _fallback_notice(reason: string): string {
-    // 只认离线规划 provider。不能写成「不等于 deepseek」—— golden 基线用的 mock
-    // 也不是 deepseek，那样会把基线里的降级文案改掉。
+    // 只认离线规划 provider：mock 与 deepseek 都不是它，只有壳显式开启离线规划时才是。
     const isOffline = this.providers.llm.describe()["provider"] === "offline-rule";
     if (isOffline) {
       return (
@@ -2462,7 +2461,7 @@ export class StudyPlanWorkflowService {
    * 目标跨度（天）—— 用来判断这是不是一个「一周排不下」的目标。
    *
    * 只读文本里的相对时间表达（3 个月 / 14 天 / 两周）与显式截止日期。
-   * **刻意不改动 payload.deadline**：那是既有字段，语义变了会让旧基线漂移。
+   * **刻意不改动 payload.deadline**：那是既有字段，语义变了会让下游展示跟着变。
    */
   private _horizon_days_of(payload: StudyPlanRequest, text: string, today: string): number {
     if (payload.deadline && this._is_date(payload.deadline)) {

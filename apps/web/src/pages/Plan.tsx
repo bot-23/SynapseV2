@@ -11,6 +11,7 @@ import {
   type TodayPlan,
 } from '@synapse/core'
 import { taskTypeLabel, formatDuration, formatRelativeTime } from '../utils/format'
+import PageIntro from '../components/PageIntro'
 
 type TabKey = 'today' | 'short' | 'long' | 'review'
 
@@ -362,6 +363,7 @@ export default function PlanView() {
   return (
     <div className="plan-page">
       <div className="notice snackbar">{notice}</div>
+      <PageIntro eyebrow="YOUR LEARNING PATH / 01" title="学习计划" description="今天该做什么、下一步怎么走，在这里都能找到答案。" />
       <div className="plan-tabs">
         {TABS.map((item) => (
           <button

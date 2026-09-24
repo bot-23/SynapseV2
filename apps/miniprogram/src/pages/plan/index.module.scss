@@ -62,8 +62,8 @@
   flex-direction: column;
   margin-top: $spacing-md;
   padding: $spacing-md $spacing-lg;
-  background: rgba(91, 108, 255, 0.08);
-  border: 2rpx solid rgba(91, 108, 255, 0.24);
+  background: rgba(19, 34, 57, 0.08);
+  border: 2rpx solid rgba(19, 34, 57, 0.24);
   border-radius: $radius-lg;
 
   &:active {
@@ -98,7 +98,7 @@
 }
 
 .versionBadge {
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   border-radius: $radius-xs;
   padding: 2rpx 14rpx;
 }
@@ -113,7 +113,7 @@
   display: block;
   font-size: $font-size-xs;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.08);
+  background: rgba(19, 34, 57, 0.08);
   border-radius: $radius-xs;
   padding: 6rpx 12rpx;
   margin-top: $spacing-sm;
@@ -218,7 +218,7 @@
   font-size: $font-size-xs;
   font-weight: $font-weight-semibold;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   border-radius: $radius-xs;
   padding: 2rpx 12rpx;
   margin-right: $spacing-sm;
@@ -721,7 +721,7 @@
   font-size: $font-size-xs;
   font-weight: $font-weight-semibold;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   border-radius: $radius-round;
   white-space: nowrap;
 }
@@ -737,7 +737,7 @@
   margin-top: $spacing-md;
   height: $button-height-sm;
   border-radius: $radius-button;
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   @include flex-center;
 
   &:active {

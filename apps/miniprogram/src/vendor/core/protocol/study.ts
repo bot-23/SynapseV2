@@ -1,7 +1,7 @@
 /**
  * 学习计划相关契约类型。
  * 翻译自 Synapse/backend/app/schemas/copilot.py（字段名与别名逐字保留，
- * JSON 形状与 Python pydantic model_dump 一致，以 baseline/golden 为冻结基线）。
+ * JSON 形状与 Python pydantic model_dump 一致）。
  */
 
 export type TaskType = "learn" | "practice" | "review" | "mock_exam";
@@ -25,8 +25,8 @@ export interface StudyTask {
   reason: string;
   /**
    * 所属科目（v2 新增，可选）。
-   * 旧行为不产生该字段（baseline 黄金样本无此项，保持对齐）；
-   * 只有当用户的学习目标覆盖多个科目时，才会为任务填充科目用于分组展示。
+   * 旧路径不产生该字段；只有当用户的学习目标覆盖多个科目时，
+   * 才会为任务填充科目用于分组展示。
    */
   subject?: string;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getCore, DEFAULT_USER_ID } from '../services/synapse'
 import { browserIdGen } from '../adapters/system'
 import type { TimetableEntry } from '@synapse/core'
+import PageIntro from '../components/PageIntro'
 import {
   WEEKDAY_OPTIONS,
   clockToMinute,
@@ -130,6 +131,7 @@ export default function TimetableView() {
   return (
     <div className="docs-page">
       <div className="notice snackbar">{notice}</div>
+      <PageIntro eyebrow="TIME WELL SPENT / 04" title="课程安排" description="先看清固定课程，再为自主学习腾出真正可用的时间。" />
 
       <div className="mine-card">
         <div className="card-title">从教务系统粘贴课表</div>

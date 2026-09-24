@@ -1,3 +1,3 @@
 export * from "./kv.js";
-export * from "./kgSeed.js";
+export * from "./kgTypes.js";
 export * from "./runtimeStore.js";

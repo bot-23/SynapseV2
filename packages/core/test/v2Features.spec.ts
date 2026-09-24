@@ -1,6 +1,5 @@
 /**
  * v2 新功能测试：课程表解析与避让、多科目分组、会话隔离与落库、计划版本。
- * 这些用例覆盖「v2 有意新增」的行为；旧行为的不漂移由 httpBaseline.spec.ts 保证。
  */
 
 import { describe, expect, it } from "vitest";
@@ -1292,6 +1291,86 @@ describe("core v2：资料库（粘贴导入 + BM25）", () => {
 });
 
 describe("core v2：资料自动构建知识图谱", () => {
+  it("新装用户的图谱是空的，只有导入资料后才长出节点", async () => {
+    const core = createSynapseCore({ idGen: testIdGen });
+    expect(core.store.kgNodes()).toHaveLength(0);
+    expect(core.store.kgEdges()).toHaveLength(0);
+
+    const graph = core.getKnowledgeGraph().data as Record<string, unknown>;
+    expect(graph["nodes"]).toEqual([]);
+    expect(graph["edges"]).toEqual([]);
+
+    // 检索没有内容可命中时，如实说明图谱为空，而不是假装有内置知识
+    expect(new KgRetrievalProvider(core.store).search("函数").join("\n")).toContain(
+      "当前已有 0 个节点、0 条边",
+    );
+
+    core.importDocument("default", "高数错题笔记", "函数极限是夹逼定理的基础。");
+    const documents = (core.listDocuments().data as Record<string, unknown>)["documents"] as Array<
+      Record<string, unknown>
+    >;
+    await new KgBuilder(core.store, new KgMockLlm()).buildKgFromDocument(
+      String(documents[0]!["doc_id"]),
+    );
+    expect(core.store.kgNodes().length).toBeGreaterThan(0);
+  });
+
+  it("老版本写进存储的内置种子被滤掉，只留用户自己建的节点", () => {
+    // 模拟「上一版已经把种子写进 KV」的现场：
+    // 删掉播种代码并不会删掉老用户的存储，不清掉它就永远在冒充用户自己的图谱。
+    const kv = new MemoryKvStore();
+    kv.set("kg:nodes", [
+      {
+        id: "course_math_hs",
+        name: "高中数学",
+        category: "course",
+        subject: "数学",
+        grade: "高中",
+        aliases: "数学,高中数学",
+        description: "",
+      },
+      {
+        id: "topic_domain",
+        name: "定义域和值域",
+        category: "topic",
+        subject: "数学",
+        grade: "高一",
+        aliases: "定义域,值域",
+        description: "函数基础概念",
+      },
+      {
+        id: "doc_abc_1",
+        name: "高三数学错题笔记.txt",
+        category: "document",
+        subject: "资料",
+        grade: "",
+        aliases: "",
+        description: "用户导入的学习资料",
+      },
+      {
+        id: "doc_abc_2",
+        name: "含参函数单调性",
+        category: "topic",
+        subject: "数学",
+        grade: "",
+        aliases: "",
+        description: "离线规则抽取",
+      },
+    ]);
+    kv.set("kg:edges", [
+      { source_id: "course_math_hs", target_id: "topic_domain", relation: "contains" },
+      { source_id: "doc_abc_1", target_id: "doc_abc_2", relation: "contains" },
+    ]);
+
+    const core = createSynapseCore({ kv, idGen: testIdGen });
+
+    expect(core.store.kgNodes().map((node) => node.id)).toEqual(["doc_abc_1", "doc_abc_2"]);
+    expect(core.store.kgEdges()).toEqual([
+      { source_id: "doc_abc_1", target_id: "doc_abc_2", relation: "contains" },
+    ]);
+    expect((core.getKnowledgeGraph().data as Record<string, unknown>)["nodes"]).toHaveLength(2);
+  });
+
   it("模型抽取后可检索新节点，重复构建不产生重复节点", async () => {
     const core = createSynapseCore({ idGen: testIdGen });
     const imported = core.importDocument(
@@ -1344,7 +1423,7 @@ describe("core v2：资料自动构建知识图谱", () => {
     expect(core.store.get_reviews("default").length).toBe(Number(data?.added_reviews));
   });
 
-  it("一键演示数据包含三天前计划、打卡、到期复习与资料图谱", async () => {
+  it("一键演示数据是完整闭环：三科资料、课程表、五天计划、打卡、复习、图谱与周报", async () => {
     const core = createSynapseCore({
       idGen: testIdGen,
       clock: { nowIso: () => "2026-09-23T08:00:00.000Z" },
@@ -1353,10 +1432,55 @@ describe("core v2：资料自动构建知识图谱", () => {
     const result = await core.loadDemoData();
 
     expect(result.success).toBe(true);
+    // 五天计划从三天前开始铺，所以「今天」正好落在第四天
     expect(core.store.get_plan("default")?.start_date).toBe("2026-09-20");
-    expect(Object.values(core.progress.get_task_progress("default")).filter(Boolean)).toHaveLength(2);
-    expect(core.listReviews().data?.due_count).toBeGreaterThanOrEqual(2);
-    expect(core.store.kgNodes().some((node) => node.id.startsWith("doc_demo-mat"))).toBe(true);
+    expect(Object.values(core.progress.get_task_progress("default")).filter(Boolean)).toHaveLength(5);
+
+    // 三科资料、三科科目，三份资料都进过图谱
+    expect(core.store.get_documents("default")).toHaveLength(3);
+    expect(core.store.get_subjects("default").map((item) => item.name)).toEqual([
+      "高中数学",
+      "高中英语",
+      "高中物理",
+    ]);
+    for (const prefix of ["doc_demo-mat", "doc_demo-eng", "doc_demo-phy"]) {
+      expect(core.store.kgNodes().some((node) => node.id.startsWith(prefix))).toBe(true);
+    }
+
+    // 图谱上的知识点是演示资料自带的，不是离线降级切出来的 bigram 碎片
+    const topics = core.store.kgNodes().filter((node) => node.category === "topic");
+    expect(topics).toHaveLength(15);
+    expect(topics.map((node) => node.name)).toContain("切线放缩");
+    expect(topics.map((node) => node.name)).toContain("非谓语动词");
+    expect(topics.map((node) => node.name)).toContain("整体法与隔离法");
+    // bigram 碎片都是两个汉字，「数与」「调性」这种一眼假
+    expect(topics.filter((node) => node.name.length < 4)).toEqual([]);
+    expect(new Set(topics.map((node) => node.subject))).toEqual(
+      new Set(["高中数学", "高中英语", "高中物理"]),
+    );
+
+    // 复习队列里有今天到期的卡，图谱四档颜色同屏
+    expect(core.listReviews().data?.due_count).toBeGreaterThanOrEqual(3);
+    const mastery = core.getKgMastery().data!;
+    expect(Number(mastery["mastered"])).toBeGreaterThan(0);
+    expect(Number(mastery["weak"])).toBeGreaterThan(0);
+    expect(Number(mastery["untouched"])).toBeGreaterThan(0);
+
+    // 课程表与周报也一并就绪，周报数字来自真实打卡
+    expect((core.getTimetable().data as Record<string, unknown>)["total"]).toBe(6);
+    const reports = core.listWeeklyReports().data as Record<string, unknown>;
+    const latest = reports["latest"] as { stats: { done_count: number; total_count: number } };
+    expect(latest).not.toBeNull();
+    expect(latest.stats.done_count).toBe(5);
+    expect(latest.stats.total_count).toBe(5);
+
+    // 反复载入不重复：资料、科目、复习卡与周报都不增长
+    const reviewCount = core.store.get_reviews("default").length;
+    await core.loadDemoData();
+    expect(core.store.get_documents("default")).toHaveLength(3);
+    expect(core.store.get_subjects("default")).toHaveLength(3);
+    expect(core.store.get_reviews("default")).toHaveLength(reviewCount);
+    expect(core.listWeeklyReports().data?.["count"]).toBe(1);
   });
 });
 
@@ -1478,7 +1602,7 @@ describe("core v2：用户资料进入计划上下文", () => {
 
   it("配额分配保证资料不会被知识图谱挤出", () => {
     const context = allocate_context_budget([
-      "图谱摘要：当前已有 9 个节点、10 条边。",
+      "图谱摘要：当前已有 12 个节点、15 条边。",
       "图谱命中：函数。",
       "图谱命中：单调性。",
       "图谱命中：导数。",
@@ -1664,7 +1788,7 @@ describe("core v2：离线（未配置 Key）时的表现", () => {
     expect(plan.final_message).toContain("没有配置模型 Key");
   });
 
-  it("默认不开启，保持冻结基线里的 Mock 行为", async () => {
+  it("默认不开启，保持「没 Key 就回一句 Mock 话术」的默认行为", async () => {
     const core = createSynapseCore({
       clock: { nowIso: () => "2026-09-22T00:00:00.000Z" },
       idGen: { next: () => `mk-${++idCounter}` },

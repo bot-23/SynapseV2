@@ -1,5 +1,5 @@
 /**
- * SSE 事件契约。事件顺序与字段名以 baseline/golden/http_*run_stream.json 为冻结基线。
+ * SSE 事件契约：先若干条 stage 事件报告进度，最后一条 done 携带完整结果。
  */
 
 import type { StudyPilotRunResponse } from "./frontend";

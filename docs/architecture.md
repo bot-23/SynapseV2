@@ -34,10 +34,10 @@
 
 进度口径同步调整：任务的打卡标识改为**内容身份**（天 + 科目 + 标题），不再是数组下标；下标会随重排漂移，导致旧打卡套到新条目上。
 
-配套测试策略（保持旧行为不漂移）：
-- `baseline/` 黄金样本**不修改**，仍代表旧 Python 实现的行为事实。
-- `httpBaseline.spec.ts` 继续逐字比对，比对前仅剥离本次有意新增的字段（`subject` / `version` / `updated_at` / `change_summary`）。
-- 新增 `v2Features.spec.ts` 覆盖新行为（课表解析与避让、多科目识别与合并、会话隔离与落库、计划版本、科目注册与增量追加、答句护栏、三层计划、今日顺延、SM-2 与 BM25）。
+配套测试策略：
+- 早期用于对齐旧 Python 实现的 `baseline/` 黄金样本已退休（见 §8 P0），不再有任何外部冻结样本约束迭代。
+- 行为由仓库内的分层测试固定：`domain.spec.ts`（domain 输入矩阵与边界）、`httpFlow.spec.ts`（端到端流程与 SSE 事件流）、`stress.spec.ts`（并发与幂等）。改行为时同步改测试。
+- `v2Features.spec.ts` 覆盖 v2 新行为（课表解析与避让、多科目识别与合并、会话隔离与落库、计划版本、科目注册与增量追加、答句护栏、三层计划、今日顺延、SM-2 与 BM25）。
 
 ## 1. 三层划分
 
@@ -75,10 +75,6 @@ SynapseNext/
     desktop/                  Tauri 2 壳（复用 apps/web 构建产物 + fs 存储适配器）
     android/                  Tauri Mobile（首选）或 Kotlin WebView 薄壳（回退）
     miniprogram/              小程序壳（P6 阶段）
-  baseline/                   P0 产物：旧仓接口与行为基线（黄金样本）
-    capture.py                可重复执行的捕获脚本（假 Key、假 LLM、临时数据目录）
-    openapi.json              旧仓接口契约快照
-    golden/                   行为黄金样本
   docs/
     architecture.md           本文
 ```
@@ -119,7 +115,7 @@ providers 实现 / storage 实现（依赖契约与 ports，由组装处注入�
 | `graphs/`（LangGraph 6 节点线性图） | 废弃 | 无 checkpoint/interrupt，状态机直接并入 application/workflow |
 | `db/models.py`（9 张表） | 翻译 | 数据结构译为 TS 类型 + KV 键空间设计，不再使用 SQL |
 | `db/store.py`、`repositories/` | 翻译 | 仓储接口的 KV 实现，键空间分桶（`messages:{conversationId}` 等） |
-| `db/retrieval.py`（networkx） | 重写 | 9 节点 10 边规模，手写邻接查询，数据存 KV 桶 |
+| `db/retrieval.py`（networkx） | 重写 | 改成手写邻接查询，节点与边存 KV 桶；内置示例图谱已去掉，图谱由用户资料构建 |
 | `file_extract.py` | 拆分 | txt 解码进 core；PDF 提取为 `ports/FileExtractor`，壳注入 pdf.js |
 | FastAPI routes/schemas | 翻译 | 进 `protocol/`；HTTP 传输为可选绑定 |
 | 前端 `App.jsx`（约 2100 行） | 迁移+拆分 | 迁入 apps/web，按功能拆 components/features/hooks；services 层改为进程内调 core |
@@ -140,7 +136,7 @@ plans:{userId}                  已保存计划（v2 起含 version / change_sum
 progress:{yyyy-mm}              进度快照按月分桶
 assessments:{yyyy-mm}           能力评估按月分桶
 timetable:{userId}              课程表条目（v2）
-kg:nodes / kg:edges             知识图谱（种子 9 节点 10 边）
+kg:nodes / kg:edges             知识图谱（无内置内容：新装为空，全部由资料构建）
 ```
 
 - 查询模式全部按键取数（无全文搜索、无关联查询），KV 完全覆盖；SQL 优势本就用不到。
@@ -151,7 +147,7 @@ kg:nodes / kg:edges             知识图谱（种子 9 节点 10 边）
 
 ## 6. 协议契约
 
-- 以现行 `/api/v1` 请求/响应形状与 SSE 事件为冻结基线（字段名、别名、事件顺序不变），基线快照存于 `baseline/`。
+- `/api/v1` 的请求/响应形状与 SSE 事件顺序由 `protocol/` 的类型与 `httpFlow.spec.ts` 的流程测试固定，不再依赖外部快照。
 - core 导出单一入口接口 `SynapseCore`：run（流式）、confirm、expandBlocks、extractFiles、plan CRUD、conversations、settings。
 - 默认传输为进程内直调；HTTP/SSE 服务器为可选壳（开发调试、未来可能的远程场景），不在本期范围。
 
@@ -169,9 +165,9 @@ kg:nodes / kg:edges             知识图谱（种子 9 节点 10 边）
 
 | 阶段 | 内容 | 验收 | 状态 |
 |---|---|---|---|
-| P0 | 本文档确认；从旧仓提取接口基线/黄金样本（假 Key、假 LLM） | 基线样本入 `baseline/`，可重复执行 | 已完成（13 个 golden 文件，两次执行哈希一致） |
-| P1 | packages/core 骨架；domain 翻译；单测对齐旧行为 | domain 用例输出与 Python 版逐字一致 | 已完成（rule/block plans 翻译，3 个黄金样本回放测试全过 + typecheck 通过） |
-| P2 | application/providers/storage/ports 翻译；DeepSeek 直连（假 transport 断言 URL/认证/消息体） | core 全量单测通过；无真实模型调用 | 已完成（20 测试全过：10 个 HTTP 黄金样本回放 + DeepSeek 假 transport + domain + 边界规则；typecheck 通过） |
+| P0 | 本文档确认；从旧仓提取接口基线/黄金样本（假 Key、假 LLM） | 基线样本入 `baseline/`，可重复执行 | 已完成，**后已退休**：`baseline/` 与逐字比对的 `httpBaseline.spec.ts` 已删除，改用仓库内分层测试固定行为 |
+| P1 | packages/core 骨架；domain 翻译；单测对齐旧行为 | domain 用例输出与 Python 版逐字一致 | 已完成（rule/block plans 翻译，`domain.spec.ts` 18 条行为用例 + typecheck 通过） |
+| P2 | application/providers/storage/ports 翻译；DeepSeek 直连（假 transport 断言 URL/认证/消息体） | core 全量单测通过；无真实模型调用 | 已完成（`httpFlow.spec.ts` 覆盖 health/画像/会话/run/SSE/计划落库，外加 deepseek 假 transport + 边界规则；typecheck 通过） |
 | P3 | apps/web 接入：UI 迁移、services 改进程内调 core | 现有 Web 功能人工清单回归通过 | 未开始 |
 | P4 | desktop（Tauri）接入 + KV fs 适配器 + `synapse.db` 自动迁移验证 | 桌面构建通过；旧数据迁移后完整可读 | 未开始 |
 | P5 | android：首选 Tauri Mobile 收敛，失败回退 Kotlin 薄壳；真机验收 | 冷/热启动、聊天、上传无回归；验证启动超时消失 | 未开始 |

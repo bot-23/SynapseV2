@@ -20,8 +20,8 @@ $OutDir = Join-Path $PSScriptRoot '..\src\assets\tabbar'
 $Size = 81
 $Scale = $Size / 24.0
 
-$NormalColor = [System.Drawing.Color]::FromArgb(255, 0x86, 0x90, 0x9c)
-$SelectedColor = [System.Drawing.Color]::FromArgb(255, 0x5b, 0x6c, 0xff)
+$NormalColor = [System.Drawing.Color]::FromArgb(255, 0x6f, 0x7c, 0x8b)
+$SelectedColor = [System.Drawing.Color]::FromArgb(255, 0x13, 0x22, 0x39)
 
 # design coordinate (24 units) -> pixels
 function P([double]$v) { return [single]($v * $Scale) }

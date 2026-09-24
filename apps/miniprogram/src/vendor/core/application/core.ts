@@ -72,7 +72,7 @@ import { ProgressService } from "./progress";
 import { SettingsService } from "./settings";
 import { StudyPlanWorkflowService } from "./workflow";
 import { AssignmentService } from "./assignmentService";
-import { KgBuilder, type KgBuildResult } from "./kgBuilder";
+import { KgBuilder, type KgBuildResult, type KgExtraction } from "./kgBuilder";
 import { ReportService } from "./reportService";
 
 export interface SynapseCoreOptions {
@@ -96,6 +96,211 @@ const DEMO_MASTERY_GRADES: ReadonlyArray<readonly number[]> = [
   [4],
   [3],
   [2, 2, 2],
+];
+
+/** 演示数据覆盖的科目：数学为主线，英语与物理并行推进。 */
+const DEMO_SUBJECTS: readonly string[] = ["高中数学", "高中英语", "高中物理"];
+
+/**
+ * 演示资料：三份不同形态的文本（错题笔记 / 语言笔记 / 理科专题），
+ * 让资料库、图谱与检索都有三科内容可看，而不是一份笔记撑场面。
+ */
+const DEMO_DOCUMENTS: ReadonlyArray<{ id: string; name: string; text: string }> = [
+  {
+    id: "demo-math-notes",
+    name: "高三数学错题笔记.txt",
+    text:
+      "函数与导数：含参函数单调性讨论要先求导，再按参数分类。" +
+      "证明不等式可使用切线放缩。圆锥曲线要注意斜率不存在的情况。" +
+      "数列错位相减时，公比等于一需要单独讨论。函数单调性是当前薄弱点。",
+  },
+  {
+    id: "demo-english-notes",
+    name: "高三英语作文与词汇笔记.txt",
+    text:
+      "应用文写作：开头要直接点题，结尾提出具体期待。" +
+      "读后续写注意情感线要与原文一致，不能突然换人称。" +
+      "高频词汇按主题整理，写作时优先用熟悉的搭配，避免生造。" +
+      "定语从句和非谓语动词是作文里最容易失分的语法点。",
+  },
+  {
+    id: "demo-physics-notes",
+    name: "高中物理受力分析专题.txt",
+    text:
+      "受力分析先确定研究对象，再按重力、弹力、摩擦力的顺序逐个判断。" +
+      "整体法与隔离法的选择取决于是否要求内力。" +
+      "斜面上的物体要注意摩擦力方向与相对运动趋势相反。" +
+      "牛顿第二定律列式前必须先明确正方向。受力分析是力学题的第一道关卡。",
+  },
+];
+
+/**
+ * 演示资料自带的知识点。
+ *
+ * 离线规则抽取是「bigram 词频 top 5」，对中文会切出「数与」「调性」「按主」
+ * 这类碎片，演示图谱上全是看不懂的词汇。这三份资料的正文是我们自己写的，
+ * 知识点本来就确定，所以直接给出来；仍然走同一条构图链路
+ * （规范化 → 去重 → 资料到知识点的边 → 建复习卡）。
+ *
+ * 名字刻意避开下方 `dueTopics` 的三个主题（含参函数单调性 / 定语从句 / 受力分析）：
+ * 撞名会让构图时建好的「今天到期」卡被掌握度播种顺手推进，复习页就没有到期卡了。
+ */
+const DEMO_KNOWLEDGE: Record<
+  string,
+  ReadonlyArray<{ name: string; subject: string; description: string }>
+> = {
+  "demo-math-notes": [
+    { name: "导数与单调性", subject: "高中数学", description: "求导后判断符号，别漏定义域" },
+    { name: "参数分类讨论", subject: "高中数学", description: "a>0、a=0、a<0 三种情况分别讨论" },
+    { name: "切线放缩", subject: "高中数学", description: "用切线作为不等式的上界或下界" },
+    { name: "圆锥曲线斜率", subject: "高中数学", description: "设直线前先单独讨论斜率不存在" },
+    { name: "数列错位相减", subject: "高中数学", description: "公比等于 1 要单独处理" },
+  ],
+  "demo-english-notes": [
+    { name: "应用文写作", subject: "高中英语", description: "开头直接点题，结尾提出具体期待" },
+    { name: "读后续写情感线", subject: "高中英语", description: "情感线要与原文一致，不突然换人称" },
+    { name: "主题词汇整理", subject: "高中英语", description: "按主题归类高频词，写作优先用熟悉搭配" },
+    { name: "非谓语动词", subject: "高中英语", description: "作文里最容易失分的语法点" },
+    { name: "写作搭配", subject: "高中英语", description: "避免生造搭配，宁可换一个熟悉的说法" },
+  ],
+  "demo-physics-notes": [
+    { name: "受力分析顺序", subject: "高中物理", description: "先定研究对象，再按重力、弹力、摩擦力逐个判断" },
+    { name: "整体法与隔离法", subject: "高中物理", description: "是否要求内力决定用哪一种" },
+    { name: "摩擦力方向", subject: "高中物理", description: "与相对运动趋势相反" },
+    { name: "斜面受力", subject: "高中物理", description: "斜面上要同时看摩擦力与重力分量" },
+    { name: "牛顿第二定律列式", subject: "高中物理", description: "列式前先明确正方向" },
+  ],
+};
+
+/** 演示课程表：一周六节课，让「生成计划时避开上课时段」有真实的忙时段可避。 */
+const DEMO_TIMETABLE_TEXT = [
+  "周一 语文 08:00-09:40",
+  "周一 数学 10:00-11:40",
+  "周二 英语 08:00-09:40",
+  "周三 物理 14:00-15:40",
+  "周四 数学 10:00-11:40",
+  "周五 化学 08:00-09:40",
+].join("\n");
+
+/** 演示计划：五天、三科交替，每天两件事。 */
+const DEMO_WEEKLY_PLAN: StudyPlanPayload["weekly_plan"] = [
+  {
+    day_index: 1,
+    focus: "函数与导数错题复盘",
+    tasks: [
+      {
+        title: "整理含参函数单调性错因",
+        subject: "高中数学",
+        task_type: "review",
+        duration_minutes: 25,
+        reason: "先定位高频失分原因",
+      },
+      {
+        title: "背 30 个高频词汇并造句",
+        subject: "高中英语",
+        task_type: "learn",
+        duration_minutes: 20,
+        reason: "语言类先补输入材料",
+      },
+    ],
+    carry_over: [],
+  },
+  {
+    day_index: 2,
+    focus: "英语写作与数学巩固",
+    tasks: [
+      {
+        title: "写一篇应用文并自查语法",
+        subject: "高中英语",
+        task_type: "practice",
+        duration_minutes: 35,
+        reason: "用输出暴露语法漏洞",
+      },
+      {
+        title: "复习圆锥曲线弦长公式",
+        subject: "高中数学",
+        task_type: "practice",
+        duration_minutes: 25,
+        reason: "用练习校正公式记忆",
+      },
+    ],
+    carry_over: ["整理含参函数单调性错因"],
+  },
+  {
+    day_index: 3,
+    focus: "受力分析专项",
+    tasks: [
+      {
+        title: "受力分析专项 15 题",
+        subject: "高中物理",
+        task_type: "practice",
+        duration_minutes: 40,
+        reason: "力学题的第一道关卡要练到稳",
+      },
+      {
+        title: "整理受力分析易错模型",
+        subject: "高中物理",
+        task_type: "review",
+        duration_minutes: 15,
+        reason: "把错因沉淀成可复用清单",
+      },
+    ],
+    carry_over: ["写一篇应用文并自查语法"],
+  },
+  {
+    day_index: 4,
+    focus: "限时训练与查漏",
+    tasks: [
+      {
+        title: "数学限时小测（函数 + 数列）",
+        subject: "高中数学",
+        task_type: "mock_exam",
+        duration_minutes: 40,
+        reason: "验证前几天的补漏是否真的生效",
+      },
+      {
+        title: "物理实验题读题训练",
+        subject: "高中物理",
+        task_type: "practice",
+        duration_minutes: 20,
+        reason: "先把题意读准再谈列式",
+      },
+    ],
+    carry_over: ["受力分析专项 15 题"],
+  },
+  {
+    day_index: 5,
+    focus: "三科收口复盘",
+    tasks: [
+      {
+        title: "回看三科错题清单，只留 3 条最该盯的",
+        subject: "高中英语",
+        task_type: "review",
+        duration_minutes: 20,
+        reason: "收口阶段不堆信息，只留最关键的",
+      },
+      {
+        title: "写出下周第一件要开始做的事",
+        subject: "高中数学",
+        task_type: "review",
+        duration_minutes: 15,
+        reason: "让下一轮计划有明确起点",
+      },
+    ],
+    carry_over: ["数学限时小测（函数 + 数列）"],
+  },
+];
+
+/**
+ * 演示数据里「已经打过卡」的任务（按 第几天 / 第几个任务 定位）。
+ * 覆盖三科、跨四个学习日，让仪表盘、连续打卡与能力值都有真实的起点。
+ */
+const DEMO_DONE_TASKS: ReadonlyArray<{ dayIndex: number; taskIndex: number }> = [
+  { dayIndex: 1, taskIndex: 0 },
+  { dayIndex: 1, taskIndex: 1 },
+  { dayIndex: 2, taskIndex: 0 },
+  { dayIndex: 3, taskIndex: 0 },
+  { dayIndex: 4, taskIndex: 0 },
 ];
 
 export class SynapseCore {
@@ -414,8 +619,23 @@ export class SynapseCore {
     docId: string,
     userId = "default",
   ): Promise<ApiResponse<KgBuildResult>> {
+    return this._build_kg(this.kgBuilder, docId, userId);
+  }
+
+  /**
+   * 构图，并把新知识点写进明日复习队列。
+   *
+   * 资料库的「构建图谱」与「一键演示数据」走的是同一条路，唯一区别是演示资料
+   * 自带知识点（见 DEMO_KNOWLEDGE）——不会拿 bigram 碎片当知识点。
+   */
+  private async _build_kg(
+    builder: KgBuilder,
+    docId: string,
+    userId: string,
+    seeded?: KgExtraction,
+  ): Promise<ApiResponse<KgBuildResult>> {
     try {
-      const result = await this.kgBuilder.buildKgFromDocument(docId, userId);
+      const result = await builder.buildKgFromDocument(docId, userId, seeded);
       const reviews = this.store.get_reviews(userId);
       const knownKeys = new Set(reviews.map((item) => item.key));
       const additions = result.topic_nodes.flatMap((node) => {
@@ -1177,93 +1397,71 @@ export class SynapseCore {
       const uid = userId || "default";
       const today = to_date(this.clock.nowIso());
       const startDate = add_days(today, -3);
-      const documentRecords = build_document_records(uid, [
-        {
-          id: "demo-math-notes",
-          name: "高三数学错题笔记.txt",
-          extracted_text:
-            "函数与导数：含参函数单调性讨论要先求导，再按参数分类。" +
-            "证明不等式可使用切线放缩。圆锥曲线要注意斜率不存在的情况。" +
-            "数列错位相减时，公比等于一需要单独讨论。函数单调性是当前薄弱点。",
-        },
-      ]);
+      const documentRecords = build_document_records(
+        uid,
+        DEMO_DOCUMENTS.map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          extracted_text: doc.text,
+        })),
+      );
       this.store.save_documents(
         uid,
         documentRecords as unknown as Array<Record<string, unknown>>,
       );
-      this.store.add_subject(uid, "高中数学", "演示数据");
+      for (const subject of DEMO_SUBJECTS) {
+        this.store.add_subject(uid, subject, "演示数据");
+      }
+      // 课程表：让「生成计划时避开上课时段」有真实的忙时段可避
+      const parsedTimetable = parse_timetable_text(DEMO_TIMETABLE_TEXT, { idGen: this.idGen });
+      if (parsedTimetable.entries.length) {
+        this.store.save_timetable(uid, parsedTimetable.entries);
+      }
 
-      const weeklyPlan: StudyPlanPayload["weekly_plan"] = [
-        {
-          day_index: 1,
-          focus: "函数与导数错题回顾",
-          tasks: [
-            {
-              title: "整理含参函数单调性错因",
-              subject: "高中数学",
-              task_type: "review",
-              duration_minutes: 25,
-              reason: "先定位高频失分原因",
-            },
-          ],
-          carry_over: [],
-        },
-        {
-          day_index: 2,
-          focus: "圆锥曲线专项",
-          tasks: [
-            {
-              title: "复习弦长公式并完成两道例题",
-              subject: "高中数学",
-              task_type: "practice",
-              duration_minutes: 35,
-              reason: "用练习校正公式记忆",
-            },
-          ],
-          carry_over: [],
-        },
-        {
-          day_index: 3,
-          focus: "数列与综合复盘",
-          tasks: [
-            {
-              title: "错位相减边界条件检查",
-              subject: "高中数学",
-              task_type: "practice",
-              duration_minutes: 30,
-              reason: "补齐公比等于一的边界",
-            },
-          ],
-          carry_over: [],
-        },
-      ];
       const planMeta = this.store.save_plan(
         uid,
-        "演示计划：基于高三数学错题资料安排三天针对性复习。",
-        weeklyPlan as unknown as Array<Record<string, unknown>>,
+        "演示计划：以高三数学为主线，英语与物理并行推进的五天复习安排。",
+        DEMO_WEEKLY_PLAN as unknown as Array<Record<string, unknown>>,
         null,
         "载入演示数据",
         startDate,
       );
-      for (const day of weeklyPlan.slice(0, 2)) {
-        const task = day.tasks[0]!;
+
+      // 补上「这几天已经打过卡」的历史。
+      // 只补没打过的：重复载入演示数据不会反复叠加能力值。
+      const existingProgress = this.store.get_progress(uid);
+      let completedTasks = 0;
+      for (const item of DEMO_DONE_TASKS) {
+        const day = DEMO_WEEKLY_PLAN[item.dayIndex - 1]!;
+        const task = day.tasks[item.taskIndex]!;
+        const taskKey = plan_task_key(day.day_index, task);
+        if (existingProgress[taskKey]?.done) {
+          continue;
+        }
         this.progress.update_task_progress({
           userId: uid,
-          taskKey: plan_task_key(day.day_index, task),
+          taskKey,
           done: true,
           taskTitle: task.title,
           taskType: task.task_type,
           actualMinutes: task.duration_minutes,
           planVersion: planMeta.version,
-          planMessage: "高三数学错题冲刺",
+          // 打卡时的目标句决定这条记录计入哪个科目的能力值
+          planMessage: `我要复习${task.subject ?? ""}`,
         });
+        completedTasks += 1;
       }
 
       const reviews = this.store.get_reviews(uid);
       const reviewKeys = new Set(reviews.map((item) => item.key));
-      const dueTopics = ["含参函数单调性", "圆锥曲线弦长公式"];
-      const dueItems = dueTopics.flatMap((topic) => {
-        const key = review_key("高中数学", topic);
+      // 三科各留一张「今天到期」的卡，复习页一进来就有东西可做
+      const dueTopics: ReadonlyArray<readonly [string, string]> = [
+        ["高中数学", "含参函数单调性"],
+        ["高中英语", "定语从句"],
+        ["高中物理", "受力分析"],
+      ];
+      const dueItems = dueTopics.flatMap(([subject, topic]) => {
+        const key = review_key(subject, topic);
         if (reviewKeys.has(key)) {
           return [];
         }
@@ -1272,7 +1470,7 @@ export class SynapseCore {
           {
             ...create_review_item({
               id: this.idGen.next(),
-              subject: "高中数学",
+              subject,
               topic,
               today: startDate,
             }),
@@ -1284,9 +1482,19 @@ export class SynapseCore {
         this.store.save_reviews(uid, [...reviews, ...dueItems]);
       }
 
-      const graphResult = await this.buildKgFromDocument("demo-math-notes", uid);
+      // 三份资料都构图：图谱里同时出现三科的节点与「资料 → 知识点」边。
+      // 知识点取自 DEMO_KNOWLEDGE，不走 bigram 降级——抽出来的碎片没法看。
+      const topicNodes: Array<{ name: string; subject: string }> = [];
+      for (const doc of DEMO_DOCUMENTS) {
+        const knowledge = DEMO_KNOWLEDGE[doc.id] ?? [];
+        const graphResult = await this._build_kg(this.kgBuilder, doc.id, uid, {
+          nodes: knowledge.map((item) => ({ ...item, category: "topic" })),
+          edges: [],
+        });
+        topicNodes.push(...(graphResult.data?.topic_nodes ?? []));
+      }
       // G1：让演示数据一进来就同时出现红/黄/绿三色，否则图谱是一片灰，诊断页白做。
-      this._seed_demo_mastery(uid, graphResult.data?.topic_nodes ?? [], startDate);
+      this._seed_demo_mastery(uid, topicNodes, startDate);
 
       // 演示数据 v2：作业式计划样例（2 条待办 + 1 条逾期），让「我必须交」这条链路一进来就能演示。
       const demoAssignments: AssignmentItem[] = [
@@ -1353,17 +1561,32 @@ export class SynapseCore {
       }
       const assignmentSnapshot = this.workflow.assignment_service.snapshot(uid);
 
+      // 周报：直接算好一期，进「我的」就能看到真实数字，而不是空状态占位。
+      // 只在没有周报时生成，重复载入不会堆出多期一模一样的报告。
+      if (!this.reports.latest(uid)) {
+        await this.reports.generate(uid);
+      }
+
       return apiOk(
         {
           document_count: this.store.get_documents(uid).length,
+          subject_count: this.store.get_subjects(uid).length,
+          timetable_count: this.store.get_timetable(uid).length,
           plan_version: planMeta.version,
-          completed_tasks: 2,
+          completed_tasks: completedTasks,
           due_reviews: dueItems.length,
-          graph: graphResult.data,
+          graph: {
+            node_count: this.store.kgNodes().length,
+            edge_count: this.store.kgEdges().length,
+            document_node_count: this.store
+              .kgNodes()
+              .filter((node) => node.id.startsWith("doc_")).length,
+          },
           assignment_count: assignmentSnapshot.total,
           overdue_assignments: assignmentSnapshot.overdue_count,
+          report_ready: Boolean(this.reports.latest(uid)),
         },
-        "演示数据已载入：资料、计划、打卡、复习队列、知识图谱与作业清单均已就绪",
+        "演示数据已载入：三科资料、课程表、五天计划、打卡、复习队列、知识图谱、作业与周报均已就绪",
       );
     } catch (error) {
       return apiFail(`载入失败：${error instanceof Error ? error.message : String(error)}`);

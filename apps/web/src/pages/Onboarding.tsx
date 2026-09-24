@@ -53,71 +53,93 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   return (
     <div className="profile-gate">
-      <div className="profile-form-wrap">
-        <span className="profile-logo">S</span>
-        <p className="profile-kicker">Synapse</p>
-        <h1>欢迎来到 Synapse</h1>
-        <p className="profile-description">
-          告诉我如何称呼你，几秒钟后开始规划。未配置 Key 也能用本地规则生成计划。
-        </p>
+      <div className="profile-layout">
+        <aside className="profile-intro">
+          <div className="profile-stars" aria-hidden="true" />
+          <div className="profile-brand">
+            <span className="profile-logo">
+              <img src="/icon.jpg" alt="" width="52" height="52" />
+            </span>
+            <span>Synapse</span>
+          </div>
+          <div className="profile-intro-copy">
+            <p className="profile-eyebrow">你的智能学习助手</p>
+            <p className="profile-headline">把目标，变成每天走得出的路。</p>
+            <p>从规划到复习，让每一步都有方向，也看得见进步。</p>
+          </div>
+          <div className="profile-intro-foot">
+            <span>01 / 规划</span>
+            <span>02 / 执行</span>
+            <span>03 / 复习</span>
+          </div>
+        </aside>
 
-        <form onSubmit={handleSubmit}>
-          <label>
-            <span>你的称呼</span>
-            <input
-              value={name}
-              onChange={(event) => {
-                setName(event.target.value)
-                setError('')
+        <main className="profile-form-wrap">
+          <p className="profile-step">初次见面 · 只需一步</p>
+          <h1>先认识一下你</h1>
+          <p className="profile-description">
+            告诉我你的称呼和年级，一起开启适合你的学习节奏。
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            <label>
+              <span>你的称呼</span>
+              <input
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value)
+                  setError('')
+                }}
+                placeholder="例如：小明"
+                autoFocus
+              />
+            </label>
+
+            <label>
+              <span>年级</span>
+              <input
+                value={grade}
+                onChange={(event) => {
+                  setGrade(event.target.value)
+                  setError('')
+                }}
+                placeholder="例如：高三"
+              />
+            </label>
+
+            <label>
+              <span>DeepSeek API Key（可选）</span>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(event) => {
+                  setApiKey(event.target.value)
+                  setError('')
+                }}
+                placeholder="sk-…（也可以稍后再填）"
+              />
+            </label>
+            <p className="profile-key-hint">不填写也能使用本地规则规划，之后可在设置中添加。</p>
+
+            <div className="form-error visible">{error}</div>
+            {!!message && <div className="form-message">{message}</div>}
+
+            <button type="submit" className="profile-submit" disabled={validating}>
+              {validating ? '校验中…' : '开始规划'}
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button onboarding-skip"
+              onClick={() => {
+                getCore().saveProfile(DEFAULT_USER_ID, name.trim() && grade.trim() ? name.trim() : '同学', grade.trim() || '未填写')
+                onComplete()
               }}
-              placeholder="例如：小明"
-              autoFocus
-            />
-          </label>
-
-          <label>
-            <span>年级</span>
-            <input
-              value={grade}
-              onChange={(event) => {
-                setGrade(event.target.value)
-                setError('')
-              }}
-              placeholder="例如：高三"
-            />
-          </label>
-
-          <label>
-            <span>DeepSeek API Key（可选）</span>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(event) => {
-                setApiKey(event.target.value)
-                setError('')
-              }}
-              placeholder="sk-…（留空则用本地规则模式）"
-            />
-          </label>
-
-          <div className="form-error visible">{error}</div>
-          {!!message && <div className="form-message">{message}</div>}
-
-          <button type="submit" className="profile-submit" disabled={validating}>
-            {validating ? '校验中…' : '开始规划'}
-          </button>
-
-          <button
-            type="button"
-            className="secondary-button onboarding-skip"
-            onClick={() => {
-              getCore().saveProfile(DEFAULT_USER_ID, name.trim() && grade.trim() ? name.trim() : '同学', grade.trim() || '未填写')
-              onComplete()
-            }}
-          >
-            跳过，先用本地规则模式
-          </button>
-        </form>
+            >
+              跳过，先用本地规则模式
+            </button>
+          </form>
+        </main>
       </div>
     </div>
   )

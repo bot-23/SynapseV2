@@ -53,7 +53,7 @@ export class MockLlmProvider implements LlmProvider {
  * 「闲聊回复」，于是用户明明要计划也只拿到一句话。这里直接抛错，让上层走既有的
  * 「模型不可达 → 规则计划」通道，离线也能拿到真正可执行的计划。
  *
- * 默认不启用，因为 golden 基线冻结的是 Mock 的行为；由壳显式开启。
+ * 默认不启用：默认行为是 Mock 的一句固定话术；由壳显式开启后离线才真正可用。
  */
 export class OfflinePlanLlmProvider implements LlmProvider {
   constructor(

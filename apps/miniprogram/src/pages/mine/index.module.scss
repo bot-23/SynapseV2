@@ -61,6 +61,32 @@
   transition: opacity $transition-fast;
 }
 
+/* 「我的」页的分组小标题：今日状态 / 学习资产 / 设置 */
+.groupTitle {
+  display: block;
+  margin: $spacing-lg 0 $spacing-sm $spacing-xs;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  letter-spacing: 2rpx;
+  color: $color-text-tertiary;
+}
+
+/* 卡片标题右侧的文字按钮（如「配置 Key」） */
+.linkButton {
+  flex-shrink: 0;
+  padding: 4rpx $spacing-xs;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.linkButtonText {
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $color-primary;
+}
+
 .rowBetween {
   display: flex;
   align-items: center;
@@ -197,7 +223,7 @@
   @include button-reset;
   width: 100%;
   height: $button-height-md;
-  background: rgba(245, 63, 63, 0.08);
+  background: rgba(220, 38, 38, 0.08);
   border: 1rpx solid $color-error;
   border-radius: $radius-button;
   color: $color-error;
@@ -220,8 +246,8 @@
   color: $color-primary;
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
-  background: rgba(91, 108, 255, 0.08);
-  border: 1rpx solid rgba(91, 108, 255, 0.24);
+  background: rgba(19, 34, 57, 0.08);
+  border: 1rpx solid rgba(19, 34, 57, 0.24);
   border-radius: $radius-button;
 }
 
@@ -343,7 +369,7 @@
   font-size: $font-size-xs;
   font-weight: $font-weight-medium;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.12);
+  background: rgba(19, 34, 57, 0.12);
   border-radius: $radius-round;
 }
 

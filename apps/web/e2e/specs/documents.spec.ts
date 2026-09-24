@@ -57,11 +57,12 @@ test.describe('资料库', () => {
     await page.getByRole('button', { name: '构建图谱' }).click()
     await expect(page.locator('.notice.snackbar')).toContainText('已新增', { timeout: 15_000 })
     await page.locator('.nav-item', { hasText: '我的' }).click()
+    // 图谱没有内置节点：这里 6 个 = 1 个资料节点 + 离线抽取的 5 个知识点
     const graphEntry = page.getByRole('button', { name: /知识图谱/ })
-    await expect(graphEntry).toContainText('15 个节点')
+    await expect(graphEntry).toContainText('6 个节点')
     await graphEntry.click()
     await expect(page.getByRole('img', { name: '个人知识图谱' })).toBeVisible()
-    await expect(page.locator('.graph-node')).toHaveCount(15)
+    await expect(page.locator('.graph-node')).toHaveCount(6)
     await page.getByRole('button', { name: '返回我的' }).click()
     await page.locator('.nav-item', { hasText: '资料库' }).click()
 

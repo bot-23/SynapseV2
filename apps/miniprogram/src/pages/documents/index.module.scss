@@ -35,7 +35,7 @@
   border: 1rpx solid $color-primary;
   border-radius: $radius-button;
   color: $color-primary;
-  background: rgba(91, 108, 255, 0.06);
+  background: rgba(19, 34, 57, 0.06);
   font-size: $font-size-sm;
   margin-top: $spacing-md;
 
@@ -115,7 +115,7 @@
   margin-left: $spacing-xs;
   padding: 2rpx $spacing-sm;
   border-radius: $radius-button;
-  background: rgba(91, 108, 255, 0.1);
+  background: rgba(19, 34, 57, 0.1);
   font-size: $font-size-xs;
   color: $color-primary;
 }
@@ -223,7 +223,7 @@
 .docBuild {
   padding: 4rpx $spacing-md;
   border-radius: $radius-button;
-  background: rgba(91, 108, 255, 0.08);
+  background: rgba(19, 34, 57, 0.08);
 
   &:active {
     opacity: 0.7;

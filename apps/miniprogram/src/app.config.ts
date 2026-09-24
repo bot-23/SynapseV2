@@ -13,14 +13,14 @@ export default defineAppConfig({
   ],
   window: {
     backgroundTextStyle: 'light',
-    navigationBarBackgroundColor: '#5b6cff',
+    navigationBarBackgroundColor: '#132239',
     navigationBarTitleText: 'Synapse 学习陪伴',
     navigationBarTextStyle: 'white',
-    backgroundColor: '#f4f5fa'
+    backgroundColor: '#f2f5f8'
   },
   tabBar: {
-    color: '#86909c',
-    selectedColor: '#5b6cff',
+    color: '#6f7c8b',
+    selectedColor: '#132239',
     backgroundColor: '#ffffff',
     borderStyle: 'white',
     list: [

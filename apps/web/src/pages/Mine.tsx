@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { getCore, DEFAULT_USER_ID, currentRuntimeMode } from '../services/synapse'
+import PageIntro from '../components/PageIntro'
+
+type MineTarget = 'graph' | 'documents' | 'timetable'
 
 interface MineViewProps {
-  onOpenGraph: () => void
+  onNavigate: (target: MineTarget) => void
 }
 
 interface DashboardView {
@@ -33,19 +36,19 @@ interface WeeklyReportView {
   }
 }
 
-export default function MineView({ onOpenGraph }: MineViewProps) {
+export default function MineView({ onNavigate }: MineViewProps) {
   const [profile, setProfile] = useState<Record<string, unknown>>({})
   const [name, setName] = useState('')
   const [grade, setGrade] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [checking, setChecking] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [keyFormOpen, setKeyFormOpen] = useState(false)
   const [deepseekConfigured, setDeepseekConfigured] = useState(false)
   const [kgSummary, setKgSummary] = useState<Record<string, unknown>>({})
   const [timetableCount, setTimetableCount] = useState(0)
   const [subjects, setSubjects] = useState<Array<{ name: string; source: string }>>([])
   const [documentCount, setDocumentCount] = useState(0)
-  const [documentNodeCount, setDocumentNodeCount] = useState(0)
   const [dashboard, setDashboard] = useState<DashboardView | null>(null)
   const [notice, setNotice] = useState('')
   const [loadingDemo, setLoadingDemo] = useState(false)
@@ -73,10 +76,6 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
 
     const kgRes = getCore().getGraphSummary()
     setKgSummary((kgRes.data ?? {}) as Record<string, unknown>)
-    const graphRes = getCore().getKnowledgeGraph()
-    setDocumentNodeCount(
-      Number((graphRes.data as Record<string, unknown> | null)?.['document_node_count'] ?? 0),
-    )
 
     const timetableRes = getCore().getTimetable(DEFAULT_USER_ID)
     setTimetableCount(Number((timetableRes.data as Record<string, unknown> | null)?.['total'] ?? 0))
@@ -143,6 +142,7 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
       console.log('[Synapse] Key 已保存', saved.message)
       setFeedback(saved.message)
       setApiKey('')
+      setKeyFormOpen(false)
       load()
     } catch (error) {
       console.error('[Synapse] Key 校验异常', error)
@@ -217,10 +217,14 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
   }
 
   const nameLocked = Boolean(profile['display_name'])
+  const nodeCount = Number(kgSummary['node_count'] ?? 0)
+  const edgeCount = Number(kgSummary['edge_count'] ?? 0)
+  const demoEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO === 'true'
 
   return (
     <div className="mine-page">
       <div className="notice snackbar">{notice}</div>
+      <PageIntro eyebrow="YOUR PROGRESS / 05" title="我的空间" description="回看每一点积累，管理自己的科目、数据与学习方式。" />
       <div className="mine-header">
         <div className="mine-avatar">{nameLocked ? String(profile['display_name']).slice(0, 1) : '我'}</div>
         <div className="mine-header-info">
@@ -233,6 +237,8 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
           </div>
         </div>
       </div>
+
+      <p className="mine-group-title">今日状态</p>
 
       <div className="mine-card">
         <div className="card-title">学习仪表盘</div>
@@ -339,6 +345,67 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
         </button>
       </div>
 
+      <p className="mine-group-title">学习资产</p>
+
+      <div className="mine-card">
+        <div className="card-title">我的科目</div>
+        <div className="card-desc">
+          对话里提到的科目会记在这里，跨对话保留；生成计划时按这些科目一起排。识别错了可以删掉。
+        </div>
+        {subjects.length === 0 && (
+          <div className="feedback">还没有科目，去「对话」页说说你要学什么。</div>
+        )}
+        {subjects.map((subject) => (
+          <div key={subject.name} className="subject-row">
+            <div className="subject-info">
+              <span className="subject-name">{subject.name}</span>
+              {!!subject.source && <span className="subject-source">{subject.source}</span>}
+            </div>
+            <button type="button" className="subject-remove" onClick={() => removeSubject(subject.name)}>
+              删除
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button type="button" className="mine-card mine-link-card" onClick={() => onNavigate('timetable')}>
+        <div className="row-between">
+          <span className="card-title-inline">我的课程表</span>
+          <span className="row-arrow">›</span>
+        </div>
+        <div className="card-desc">
+          {timetableCount > 0
+            ? `已录入 ${timetableCount} 节课，生成计划时会自动避开上课时段。`
+            : '还没录入课程。导入或手动录入后，计划会自动避开上课时间。'}
+        </div>
+      </button>
+
+      <button type="button" className="mine-card mine-link-card" onClick={() => onNavigate('documents')}>
+        <div className="row-between">
+          <span className="card-title-inline">资料库</span>
+          <span className="row-arrow">›</span>
+        </div>
+        <div className="card-desc">
+          {documentCount > 0
+            ? `已导入 ${documentCount} 份资料，生成计划时会用本地 BM25 检索它们作为参考。`
+            : '粘贴笔记或教材片段，切片与检索都在本机完成，不联网、不上传。'}
+        </div>
+      </button>
+
+      <button type="button" className="mine-card mine-link-card" onClick={() => onNavigate('graph')}>
+        <div className="row-between">
+          <span className="card-title-inline">知识图谱</span>
+          <span className="row-arrow">›</span>
+        </div>
+        <div className="card-desc">
+          {nodeCount > 0
+            ? `共 ${nodeCount} 个节点、${edgeCount} 条边，全部由你的资料构建。`
+            : '还没有节点。导入资料并在资料库里点「构建图谱」，知识点和它们的关系会长在这里。'}
+        </div>
+      </button>
+
+      <p className="mine-group-title">设置</p>
+
       <div className="mine-card">
         <div className="card-title">学习画像</div>
         <div className="card-desc">年级与姓名会用于调整计划的语气和难度描述。</div>
@@ -366,85 +433,49 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
       </div>
 
       <div className="mine-card">
-        <div className="card-title">我的科目</div>
-        <div className="card-desc">
-          对话里提到的科目会记在这里，跨对话保留；生成计划时按这些科目一起排。识别错了可以删掉。
+        <div className="row-between">
+          <span className="card-title-inline">AI 模型接入</span>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setKeyFormOpen((open) => !open)
+              setFeedback('')
+            }}
+          >
+            {keyFormOpen ? '收起' : deepseekConfigured ? '更换 Key' : '配置 Key'}
+          </button>
         </div>
-        {subjects.length === 0 && (
-          <div className="feedback">还没有科目，去「对话」页说说你要学什么。</div>
-        )}
-        {subjects.map((subject) => (
-          <div key={subject.name} className="subject-row">
-            <div className="subject-info">
-              <span className="subject-name">{subject.name}</span>
-              {!!subject.source && <span className="subject-source">{subject.source}</span>}
-            </div>
-            <button type="button" className="subject-remove" onClick={() => removeSubject(subject.name)}>
-              删除
+        <div className="card-desc">
+          {deepseekConfigured
+            ? '已接入 DeepSeek。Key 只保存在本设备，设备直连模型商，不经过任何中间服务器。'
+            : '当前用本地规则模式：不填 Key 也能用，填上之后理解和表达会更贴近你的说法。'}
+        </div>
+        {keyFormOpen && (
+          <>
+            <input
+              type="password"
+              className="mine-input"
+              placeholder={deepseekConfigured ? '输入新 Key 可覆盖' : 'sk-...'}
+              value={apiKey}
+              onChange={(event) => {
+                setApiKey(event.target.value)
+                setFeedback('')
+              }}
+            />
+            {!!feedback && <div className="feedback">{feedback}</div>}
+            <button
+              type="button"
+              className={`primary-button${checking ? ' disabled' : ''}`}
+              disabled={checking}
+              onClick={checkAndSaveKey}
+            >
+              {checking ? '正在校验…' : '校验并保存'}
             </button>
-          </div>
-        ))}
+          </>
+        )}
+        {!keyFormOpen && !!feedback && <div className="feedback">{feedback}</div>}
       </div>
-
-      <div className="mine-card">
-        <div className="card-title">DeepSeek API Key</div>
-        <div className="card-desc">
-          Key 只保存在本设备，设备直连模型商，不经过任何中间服务器。保存前会先发一次真实请求校验。
-        </div>
-        <input
-          type="password"
-          className="mine-input"
-          placeholder={deepseekConfigured ? '已配置，输入新 Key 可覆盖' : 'sk-...'}
-          value={apiKey}
-          onChange={(event) => {
-            setApiKey(event.target.value)
-            setFeedback('')
-          }}
-        />
-        {!!feedback && <div className="feedback">{feedback}</div>}
-        <button
-          type="button"
-          className={`primary-button${checking ? ' disabled' : ''}`}
-          disabled={checking}
-          onClick={checkAndSaveKey}
-        >
-          {checking ? '正在校验…' : '校验并保存'}
-        </button>
-      </div>
-
-      <div className="mine-card">
-        <div className="row-between">
-          <span className="card-title-inline">我的课程表</span>
-          <span className="row-arrow">›</span>
-        </div>
-        <div className="card-desc">
-          {timetableCount > 0
-            ? `已录入 ${timetableCount} 节课，生成计划时会自动避开上课时段。`
-            : '还没录入课程。导入或手动录入后，计划会自动避开上课时间。'}
-        </div>
-      </div>
-
-      <div className="mine-card">
-        <div className="row-between">
-          <span className="card-title-inline">资料库</span>
-          <span className="row-arrow">›</span>
-        </div>
-        <div className="card-desc">
-          {documentCount > 0
-            ? `已导入 ${documentCount} 份资料，生成计划时会用本地 BM25 检索它们作为参考。`
-            : '粘贴笔记或教材片段，切片与检索都在本机完成，不联网、不上传。'}
-        </div>
-      </div>
-
-      <button type="button" className="mine-card graph-entry" onClick={onOpenGraph}>
-        <div className="row-between">
-          <div className="card-title">知识图谱</div>
-          <span className="row-arrow">›</span>
-        </div>
-        <div className="card-desc">
-          共 {String(kgSummary['node_count'] ?? '-')} 个节点、{String(kgSummary['edge_count'] ?? '-')} 条边，其中 {documentNodeCount} 个来自资料。
-        </div>
-      </button>
 
       <div className="mine-card">
         <div className="card-title">数据管理</div>
@@ -455,7 +486,7 @@ export default function MineView({ onOpenGraph }: MineViewProps) {
         <button type="button" className="secondary-button" onClick={exportJson}>
           导出 JSON 数据
         </button>
-        {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO === 'true') && (
+        {demoEnabled && (
           <button
             type="button"
             className="primary-button muted"

@@ -104,9 +104,9 @@ export default function GraphPage() {
       return
     }
     const context = Taro.createCanvasContext('knowledge-graph')
-    context.setStrokeStyle('#d7d1e8')
+    context.setStrokeStyle('#ccd6e3')
     context.setLineWidth(1)
-    context.setFillStyle('#86909c')
+    context.setFillStyle('#93a0ae')
     context.setFontSize(7)
     edges.forEach((edge) => {
       const source = positions.get(edge.source_id)
@@ -131,7 +131,9 @@ export default function GraphPage() {
       <View className={styles.summary}>
         <Text className={styles.title}>从你的资料里生长的学习路径</Text>
         <Text className={styles.desc}>
-          {nodes.length} 个节点 · {edges.length} 条关系 · 颜色是掌握度
+          {nodes.length === 0
+            ? '图谱还是空的：去资料库导入资料并点「构建图谱」'
+            : `${nodes.length} 个节点 · ${edges.length} 条关系 · 颜色是掌握度`}
         </Text>
       </View>
 

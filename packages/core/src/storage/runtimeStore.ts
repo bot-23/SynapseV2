@@ -17,7 +17,7 @@ import type {
   WeeklyReport,
 } from "../protocol/study.js";
 import type { KvStore } from "./kv.js";
-import { SEED_KG_EDGES, SEED_KG_NODES, type KnowledgeEdge, type KnowledgeNode } from "./kgSeed.js";
+import type { KnowledgeEdge, KnowledgeNode } from "./kgTypes.js";
 
 /** 计划历史版本最多保留多少版（防止 KV 无限膨胀）。 */
 const MAX_PLAN_VERSIONS = 30;
@@ -91,6 +91,25 @@ const KEY_PROFILE = "profile";
 const KEY_CONVERSATIONS = "conversations";
 const KEY_KG_NODES = "kg:nodes";
 const KEY_KG_EDGES = "kg:edges";
+
+/**
+ * 早期版本内置过一套 9 节点 10 边的示例图谱（移植自原型 Synapse/db/retrieval.py）。
+ *
+ * 播种代码已经删了，但删代码不会删掉老用户存储里的数据——它们会继续冒充
+ * 「用户自己的图谱」，清空重装前一直在。所以读取时直接滤掉；下次写入图谱
+ * 时会顺手落盘清干净。按项目约定走读侧兜底，不写迁移脚本。
+ */
+const LEGACY_SEED_NODE_IDS = new Set([
+  "course_math_hs",
+  "topic_functions",
+  "topic_quadratic",
+  "topic_monotonicity",
+  "topic_domain",
+  "topic_exam_strategy",
+  "task_sort_notes",
+  "task_topic_drill",
+  "task_review_loop",
+]);
 
 function dedupeText(items: unknown[], limit = 12): string[] {
   const seen = new Set<string>();
@@ -939,25 +958,21 @@ export class RuntimeStore {
 
   // ------------------------------------------------------------------
   // 知识图谱
+  //
+  // 图谱没有内置内容：新装即空，全部由用户自己的资料与计划构建。
   // ------------------------------------------------------------------
 
-  ensureKgSeeded(): void {
-    const nodes = this.kv.get(KEY_KG_NODES);
-    if (Array.isArray(nodes) && nodes.length > 0) {
-      return;
-    }
-    this.kv.set(KEY_KG_NODES, SEED_KG_NODES);
-    this.kv.set(KEY_KG_EDGES, SEED_KG_EDGES);
-  }
-
   kgNodes(): KnowledgeNode[] {
-    this.ensureKgSeeded();
-    return this.readJson<KnowledgeNode[]>(KEY_KG_NODES, []);
+    return this.readJson<KnowledgeNode[]>(KEY_KG_NODES, []).filter(
+      (node) => !LEGACY_SEED_NODE_IDS.has(node.id),
+    );
   }
 
   kgEdges(): KnowledgeEdge[] {
-    this.ensureKgSeeded();
-    return this.readJson<KnowledgeEdge[]>(KEY_KG_EDGES, []);
+    return this.readJson<KnowledgeEdge[]>(KEY_KG_EDGES, []).filter(
+      (edge) =>
+        !LEGACY_SEED_NODE_IDS.has(edge.source_id) && !LEGACY_SEED_NODE_IDS.has(edge.target_id),
+    );
   }
 
   /** 按 id 去重追加图谱节点，返回实际新增数量。 */
@@ -1153,9 +1168,9 @@ export class RuntimeStore {
     this.kv.delete(`documents:${userId}`);
     this.kv.delete(`assignments:${userId}`);
     this.kv.delete(`reports:${userId}`);
-    // 当前产品是单本地用户；清空用户数据时移除资料生成的图谱，只保留内置知识。
-    this.kv.set(KEY_KG_NODES, SEED_KG_NODES);
-    this.kv.set(KEY_KG_EDGES, SEED_KG_EDGES);
+    // 当前产品是单本地用户；图谱完全由用户数据构建，清空时一并清掉。
+    this.kv.delete(KEY_KG_NODES);
+    this.kv.delete(KEY_KG_EDGES);
     this.kv.delete(`timetable:${userId}`);
     this.kv.delete("clarifications");
     this.kv.delete("assessments:default");

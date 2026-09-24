@@ -1,30 +1,32 @@
 // ============================================
-// 主题配色变量（Synapse 学习陪伴：静谧靛蓝）
+// 主题配色变量（Synapse 学习陪伴：深空蓝）
+// 与 Web 端 apps/web/src/styles.css 的 :root 变量一一对应，
+// 底色取自引导页左侧星空：#132239 → #070d18。
 // ============================================
 
 // 品牌主题色
-$color-primary: #5b6cff;
-$color-primary-light: #8fa0ff;
-$color-primary-dark: #4453e0;
+$color-primary: #132239;
+$color-primary-dark: #0c1a2e;
+$color-primary-light: #46618c; // 渐变/进度条用的浅一档品牌色
 
 // 功能色
-$color-success: #00b42a;
-$color-warning: #ff7d00;
-$color-error: #f53f3f;
-$color-info: #5b6cff;
+$color-success: #22a06b;
+$color-warning: #d97706;
+$color-error: #dc2626;
+$color-info: #46618c;
 
 // 背景色
-$color-bg-page: #f4f5fa;
+$color-bg-page: #f2f5f8;
 $color-bg-card: #ffffff;
-$color-bg-hover: #f2f3f5;
+$color-bg-hover: #eaeff4;
 
 // 文本色
-$color-text-primary: #1d2129;
-$color-text-secondary: #4e5969;
-$color-text-tertiary: #86909c;
-$color-text-disabled: #c9cdd4;
+$color-text-primary: #1a2334;
+$color-text-secondary: #4c5866;
+$color-text-tertiary: #6f7c8b;
+$color-text-disabled: #93a0ae;
 $color-text-white: #ffffff;
 
 // 边框色
-$color-border: #e8eaf2;
-$color-divider: #f2f3f5;
+$color-border: #d7dfe8;
+$color-divider: #eaeff4;

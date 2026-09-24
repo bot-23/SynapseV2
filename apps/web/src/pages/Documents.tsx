@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getCore, DEFAULT_USER_ID } from '../services/synapse'
+import PageIntro from '../components/PageIntro'
 
 interface DocumentView {
   doc_id: string
@@ -208,6 +209,7 @@ export default function DocumentsView() {
   return (
     <div className="docs-page">
       <div className="notice snackbar">{notice}</div>
+      <PageIntro eyebrow="YOUR KNOWLEDGE BASE / 03" title="学习资料" description="把笔记和讲义留在本机，整理成随时可用的学习线索。" />
 
       <div className="mine-card">
         <div className="card-title">粘贴导入</div>

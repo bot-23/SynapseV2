@@ -134,7 +134,7 @@ export default function DocumentsPage() {
       title: '删除资料',
       content: `删除「${doc.file_name}」？删掉之后检索不会再命中它。`,
       confirmText: '删除',
-      confirmColor: '#f53f3f'
+      confirmColor: '#dc2626'
     })
     if (!confirmed.confirm) {
       return

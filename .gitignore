@@ -16,6 +16,9 @@ apps/miniprogram/.pai/
 # SWC 编译缓存（文件名含平台相关 hash）
 apps/miniprogram/.swc/
 
+# 微信开发者工具的本机私有配置（每台机器不同，不入库）
+apps/miniprogram/project.private.config.json
+
 # 日志与临时文件
 *.log
 

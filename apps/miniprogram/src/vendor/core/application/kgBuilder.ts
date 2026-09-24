@@ -1,7 +1,7 @@
 import { tokenize } from "../domain/bm25";
 import type { LlmProvider } from "../providers/contracts";
 import type { RuntimeStore } from "../storage/runtimeStore";
-import type { KnowledgeEdge, KnowledgeNode } from "../storage/kgSeed";
+import type { KnowledgeEdge, KnowledgeNode } from "../storage/kgTypes";
 
 const ALLOWED_RELATIONS = new Set([
   "contains",
@@ -36,13 +36,35 @@ export interface KgBuildResult {
   added_reviews?: number;
 }
 
+/**
+ * 调用方直接给出的知识点，形如模型返回的那段 JSON。
+ *
+ * 演示资料的内容是我们自己写的，知识点本来就确定，没必要让模型或规则去猜
+ * （离线规则抽取是 bigram 词频，抽出来是「数与」「调性」这类碎片）。
+ * 走这条口子仍然复用后面的规范化、去重、连边与建卡。
+ */
+export interface KgExtraction {
+  nodes: ReadonlyArray<{
+    name: string;
+    category?: string;
+    subject?: string;
+    aliases?: string | readonly string[];
+    description?: string;
+  }>;
+  edges: ReadonlyArray<{ source_name: string; target_name: string; relation: string }>;
+}
+
 export class KgBuilder {
   constructor(
     private readonly store: RuntimeStore,
     private readonly llm: LlmProvider,
   ) {}
 
-  async buildKgFromDocument(docId: string, userId = "default"): Promise<KgBuildResult> {
+  async buildKgFromDocument(
+    docId: string,
+    userId = "default",
+    seeded?: KgExtraction,
+  ): Promise<KgBuildResult> {
     const sourceRecord = this.store
       .get_documents(userId)
       .find((item) => String(item["doc_id"] ?? "") === docId);
@@ -51,24 +73,29 @@ export class KgBuilder {
     }
 
     const text = this.documentText(sourceRecord).slice(0, 4000);
-    if (!text) {
+    if (!text && !seeded) {
       throw new Error("资料没有可用于构图的文本片段");
     }
 
     let extractedNodes: ExtractedNode[] = [];
     let extractedEdges: ExtractedEdge[] = [];
     let usedFallback = false;
-    try {
-      const generated = await this.llm.generateJson(this.buildPrompt(text));
-      extractedNodes = this.normalizeNodes(generated["nodes"]);
-      extractedEdges = this.normalizeEdges(generated["edges"]);
-    } catch {
-      usedFallback = true;
-    }
-    if (!extractedNodes.length) {
-      extractedNodes = this.offlineNodes(text);
-      extractedEdges = [];
-      usedFallback = true;
+    if (seeded) {
+      extractedNodes = this.normalizeNodes(seeded.nodes);
+      extractedEdges = this.normalizeEdges(seeded.edges);
+    } else {
+      try {
+        const generated = await this.llm.generateJson(this.buildPrompt(text));
+        extractedNodes = this.normalizeNodes(generated["nodes"]);
+        extractedEdges = this.normalizeEdges(generated["edges"]);
+      } catch {
+        usedFallback = true;
+      }
+      if (!extractedNodes.length) {
+        extractedNodes = this.offlineNodes(text);
+        extractedEdges = [];
+        usedFallback = true;
+      }
     }
 
     const prefix = String(docId).slice(0, 8).replace(/[^a-zA-Z0-9_-]/g, "_") || "document";

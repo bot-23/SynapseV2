@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toDataURL } from 'qrcode'
 import { getCore, DEFAULT_USER_ID } from '../services/synapse'
+import PageIntro from '../components/PageIntro'
 
 interface AssignmentItemView {
   id: string
@@ -200,6 +201,7 @@ export default function AssignmentsView() {
   return (
     <div className="docs-page">
       <div className="notice snackbar">{notice}</div>
+      <PageIntro eyebrow="DEADLINES & DELIVERY / 02" title="作业清单" description="把必须完成的事安排妥当，按截止时间稳稳推进。" />
 
       <div className="mine-card">
         <div className="card-title">作业式计划</div>

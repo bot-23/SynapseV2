@@ -9,7 +9,7 @@ import type {
 } from "../src/providers/contracts.js";
 import { KgRetrievalProvider } from "../src/providers/kgRetrieval.js";
 import type { KvStore } from "../src/storage/kv.js";
-import type { KnowledgeNode } from "../src/storage/kgSeed.js";
+import type { KnowledgeNode } from "../src/storage/kgTypes.js";
 
 class DelayedKgLlm implements LlmProvider {
   describe(): Record<string, unknown> {
@@ -191,7 +191,7 @@ describe("压力测试：资料构图", () => {
 
     const lines = new KgRetrievalProvider(core.store).search("压力知识点99");
     expect(lines.join("\n")).toContain("压力知识点99");
-    expect(core.store.kgNodes()).toHaveLength(109);
+    expect(core.store.kgNodes()).toHaveLength(100);
   });
 });
 
@@ -222,28 +222,31 @@ describe("压力测试：存储与幂等", () => {
       expect((await core.loadDemoData()).success).toBe(true);
     }
 
-    expect(core.store.get_documents("default")).toHaveLength(1);
-    expect(core.store.kgNodes()).toHaveLength(15);
+    expect(core.store.get_documents("default")).toHaveLength(3);
+    // 图谱完全由这些资料构建，反复载入不产生重复节点
+    const nodeIds = core.store.kgNodes().map((node) => node.id);
+    expect(nodeIds.length).toBeGreaterThan(0);
+    expect(new Set(nodeIds).size).toBe(nodeIds.length);
     expect(new Set(core.store.get_reviews("default").map((item) => item.key)).size).toBe(
       core.store.get_reviews("default").length,
     );
     expect((core.listPlanVersions().data as Record<string, unknown>)["total"]).toBe(20);
   });
 
-  it("清空演示数据后只保留内置图谱，不残留资料节点", async () => {
+  it("清空数据后图谱一并清空，不残留任何内置节点", async () => {
     const core = createSynapseCore({
       clock: { nowIso: () => "2026-09-23T08:00:00.000Z" },
       config: { offlinePlanFallback: true },
     });
     await core.loadDemoData();
-    expect(core.store.kgNodes().length).toBeGreaterThan(9);
+    expect(core.store.kgNodes().length).toBeGreaterThan(0);
 
     expect(core.deleteAllUserData().success).toBe(true);
     expect(core.store.get_documents("default")).toHaveLength(0);
     expect(core.store.get_reviews("default")).toHaveLength(0);
     expect(core.store.get_plan("default")).toBeNull();
-    expect(core.store.kgNodes()).toHaveLength(9);
-    expect(core.store.kgEdges()).toHaveLength(10);
+    expect(core.store.kgNodes()).toHaveLength(0);
+    expect(core.store.kgEdges()).toHaveLength(0);
   });
 
   it("批量导入 80 份资料后仍能命中目标资料", () => {

@@ -56,8 +56,8 @@ test.describe('完整用户旅程', () => {
     // 8. 「我的」页
     await page.locator('.nav-item', { hasText: '我的' }).click()
     await expect(page.locator('.mine-header-name')).toHaveText('小李')
-    // 知识图谱有内置节点
-    await expect(page.locator('.mine-card', { hasText: '知识图谱' })).toContainText('9 个节点')
+    // 新装用户没有导入过资料，图谱就该是空的，不该凭空长出节点
+    await expect(page.locator('.mine-card', { hasText: '知识图谱' })).toContainText('还没有节点')
     // 澄清路径也应把目标里提到的科目记进「我的科目」
     const subjectCard = page.locator('.mine-card', { hasText: '我的科目' })
     await expect(subjectCard.locator('.subject-name').first()).toBeVisible({ timeout: 10_000 })
@@ -79,9 +79,10 @@ test.describe('完整用户旅程', () => {
     })
 
     const graphEntry = page.getByRole('button', { name: /知识图谱/ })
-    await expect(graphEntry).toContainText('来自资料')
+    await expect(graphEntry).toContainText('全部由你的资料构建')
     await graphEntry.click()
-    await expect(page.locator('.graph-node')).not.toHaveCount(9)
+    // 三科资料都构过图，节点数远多于空图谱
+    expect(await page.locator('.graph-node').count()).toBeGreaterThan(5)
 
     await page.locator('.nav-item', { hasText: '计划' }).click()
     await page.locator('.plan-tab', { hasText: '短期' }).click()

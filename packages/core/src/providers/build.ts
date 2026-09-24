@@ -23,7 +23,7 @@ export interface ProviderConfig {
   deepseekMaxTokens: number;
   /**
    * 未配置 Key 时是否直接走规则引擎排计划（而不是回一句固定话术）。
-   * 默认 false：golden 基线冻结的是 MockLlmProvider 的行为；壳显式开启后离线才真正可用。
+   * 默认 false，保持「没 Key 就是 mock 话术」的默认行为；壳显式开启后离线才真正可用。
    */
   offlinePlanFallback: boolean;
 }
