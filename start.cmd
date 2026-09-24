@@ -1,8 +1,11 @@
 @echo off
 rem ============================================================
-rem  Synapse - one-click launcher for Windows.
-rem  Double-click this file. It installs dependencies on first
-rem  run, starts the Vite dev server, then opens the browser.
+rem  Synapse launcher for Windows. Double-click this file.
+rem
+rem  1) If a prebuilt apps\web\dist exists (demo package), it just
+rem     serves it with Node - no npm install needed.
+rem  2) Otherwise it installs dependencies and starts the Vite dev
+rem     server.
 rem
 rem  NOTE: keep this file ASCII-only. cmd.exe reads .cmd scripts
 rem  with the system code page, so non-ASCII bytes break parsing.
@@ -19,15 +22,34 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem ---- 1) demo package: prebuilt bundle, zero dependencies ----
+if exist "apps\web\dist\index.html" (
+  echo [Synapse] Starting demo server ^(prebuilt, no install needed^)...
+  start "Synapse Demo" cmd /k "node serve.cjs"
+  timeout /t 3 /nobreak >nul
+  start "" http://localhost:5180
+  echo.
+  echo [Synapse] Browser opened at http://localhost:5180
+  echo           Keep the "Synapse Demo" window open; closing it stops the server.
+  timeout /t 4 /nobreak >nul
+  exit /b 0
+)
+
+rem ---- 2) source checkout: install deps, then dev server ----
 if not exist "node_modules" (
   echo [Synapse] First run: installing dependencies, this takes a few minutes...
   echo.
   call npm install
   if errorlevel 1 (
     echo.
-    echo [Synapse] npm install failed. Check the output above.
-    pause
-    exit /b 1
+    echo [Synapse] npm install failed. Retrying with the npmmirror registry...
+    call npm install --registry=https://registry.npmmirror.com
+    if errorlevel 1 (
+      echo.
+      echo [Synapse] npm install failed again. Check your network / proxy.
+      pause
+      exit /b 1
+    )
   )
 )
 

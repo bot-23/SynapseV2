@@ -25,6 +25,13 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 微信小程序：先 `npm run build:weapp --workspace taro_template`，再用微信开发者工具导入 `apps/miniprogram`
 （选目录本身，**不要**选里面的 `dist`；工具读的是构建产物，改完 src 必须重新构建）。
 
+做**离线演示包**（拷给别人的、不需要装依赖的版本）：先 `VITE_ENABLE_DEMO=true` 构建 Web，
+再把源码连同 `apps/web/dist` 一起拷贝，对方只要有 Node 就能双击 `start.cmd` 跑起来
+（`start.cmd` 检测到 `apps/web/dist` 会用零依赖的 `serve.cjs` 直接托管，跳过 npm install）。
+
+> ⚠️ 演示数据按钮默认在生产构建里是隐藏的（`demoEnabled = import.meta.env.DEV || VITE_ENABLE_DEMO === 'true'`）。
+> 生产构建要保留它，必须在构建时设 `VITE_ENABLE_DEMO=true`，否则 `npm run build` 出来的页面里没有「载入演示数据」。
+
 ---
 
 ## 当前状态
