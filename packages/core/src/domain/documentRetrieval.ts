@@ -4,7 +4,7 @@
  * 检索部分在 v2 升级为 BM25（见 bm25.ts）。
  */
 
-import { build_index, search_index, type Bm25Document } from "./bm25.js";
+import { format_document_hits, search_documents_ranked } from "./hybridRetrieval.js";
 
 export interface DocumentChunk {
   chunk_id: string;
@@ -123,28 +123,8 @@ export function search_document_records(
   weakPoints: string[] | null = null,
   limit = 3,
 ): string[] {
-  const searchText = [query, ...(weakPoints ?? [])].join(" ");
-  const documents: Bm25Document[] = [];
-  const meta = new Map<string, { fileName: string; text: string }>();
-
-  for (const record of records) {
-    (record.chunks ?? []).forEach((chunk, index) => {
-      const text = String(chunk.text ?? "");
-      if (!text) {
-        return;
-      }
-      const id = `${record.doc_id ?? "doc"}#${chunk.chunk_id || index}`;
-      documents.push({ id, text });
-      meta.set(id, { fileName: String(record.file_name ?? "未命名资料"), text });
-    });
-  }
-
-  if (!documents.length) {
-    return [];
-  }
-
-  return search_index(build_index(documents), searchText, limit).map((hit) => {
-    const item = meta.get(hit.id)!;
-    return `资料命中[${item.fileName}]: ${item.text.slice(0, 180)}`;
-  });
+  // v3：交给混合检索（BM25 + 科目加成 + 单资料去重），输出格式保持不变
+  return format_document_hits(
+    search_documents_ranked(records, query, { weakPoints, limit, perDocument: 1 }),
+  );
 }

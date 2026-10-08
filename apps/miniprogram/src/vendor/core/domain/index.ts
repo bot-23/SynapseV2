@@ -104,6 +104,7 @@ export {
   pick_due_for_today,
   review_key,
 } from "./review";
+
 export {
   HINT_TIERS,
   LEAK_WINDOW,
@@ -143,3 +144,38 @@ export {
   type DetectSubjectsInput,
   type SubjectPlan,
 } from "./multiSubject";
+export {
+  TREND_DEFAULT_DAYS,
+  TREND_MAX_DAYS,
+  build_learning_trends,
+  type LearningTrends,
+  type SubjectTrend,
+  type SubjectTrendPoint,
+  type TrendPoint,
+  type TrendProgressRow,
+} from "./learningTrends";
+export {
+  ERROR_BOOK_MAX_ITEMS,
+  ERROR_FIELD_MAX_CHARS,
+  error_item_dedupe_key,
+  normalize_error_item,
+  type ErrorItem,
+} from "./errorBook";
+export {
+  QUIZ_MAX_CHARS,
+  QUIZ_MAX_OPTIONS,
+  QUIZ_MAX_QUESTIONS,
+  grade_quiz,
+  parse_quiz_json,
+  type QuizGrade,
+  type QuizQuestion,
+} from "./quiz";
+export { parse_ics_timetable, type ParseIcsOptions } from "./timetableIcs";
+export {
+  expand_query,
+  format_document_hits,
+  parse_rerank_json,
+  search_documents_ranked,
+  type RankedHit,
+  type RankedSearchOptions,
+} from "./hybridRetrieval";

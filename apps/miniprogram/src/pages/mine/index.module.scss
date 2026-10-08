@@ -406,6 +406,200 @@
   color: $color-text-tertiary;
 }
 
+/* C：学习趋势 —— 纯 View 宽度百分比柱状图，不引图表库 */
+.trendTabs {
+  display: flex;
+  margin-top: $spacing-md;
+}
+
+.trendTab {
+  flex: 1;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-bg-page;
+  border-radius: $radius-button;
+  margin-right: $spacing-sm;
+
+  &:last-child {
+    margin-right: 0;
+  }
+}
+
+.trendTabActive {
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+}
+
+.trendTabText {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.trendTabTextActive {
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}
+
+.trendChart {
+  display: flex;
+  align-items: flex-end;
+  height: 160rpx;
+  margin-top: $spacing-md;
+  padding: 0 $spacing-xs;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.trendBarSlot {
+  flex: 1;
+  min-width: 2rpx;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.trendBar {
+  width: 60%;
+  max-width: 24rpx;
+  background: linear-gradient(180deg, $color-primary-light 0%, $color-primary 100%);
+  border-radius: $radius-xs $radius-xs 0 0;
+}
+
+.trendTotals {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-md;
+}
+
+/* B：AI 记忆 —— 一行一条，右侧删除 */
+.memoryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.memoryInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-right: $spacing-sm;
+}
+
+.memoryLabel {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.memoryValue {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  margin-top: 4rpx;
+  @include text-ellipsis-multi(2);
+}
+
+/* A：本地档案 —— 一行一份，当前高亮 */
+.userRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.userInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.userNameRow {
+  display: flex;
+  align-items: center;
+}
+
+.userName {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  @include text-ellipsis;
+}
+
+.userBadge {
+  flex-shrink: 0;
+  margin-left: $spacing-sm;
+  padding: 2rpx 12rpx;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $color-primary;
+  background: rgba(19, 34, 57, 0.12);
+  border-radius: $radius-round;
+}
+
+.userMeta {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: 2rpx;
+  @include text-ellipsis;
+}
+
+.userActions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-left: $spacing-sm;
+}
+
+.userAction {
+  padding: 4rpx $spacing-md;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+  margin-right: $spacing-sm;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.userActionText {
+  font-size: $font-size-xs;
+  color: $color-primary;
+}
+
+.userDelete {
+  padding: 4rpx $spacing-md;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+/* B：数据导入的粘贴框 */
+.importTextarea {
+  width: 100%;
+  min-height: 200rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: $spacing-md;
+  font-size: $font-size-xs;
+  color: $color-text-primary;
+  margin-top: $spacing-xs;
+}
+
 .bottomSpacer {
   height: 120rpx;
 }

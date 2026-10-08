@@ -3,38 +3,93 @@
  * 进程内直调 @synapse/core，无 HTTP 服务器，完全离线可用（模型调用除外）。
  */
 
-import { createSynapseCore, type SynapseCore } from '@synapse/core'
+import { CachedKvStore, createSynapseCore, type SynapseCore } from '@synapse/core'
 import type {
   ClarificationAnswer,
+  CopilotStreamEvent,
+  FrontendAttachment,
   StudyPilotRunRequest,
   StudyPilotRunResponse,
   StudyPlanRequest,
 } from '@synapse/core'
-import { BrowserKvStore } from '../adapters/kvStore'
-import { BrowserHttpTransport } from '../adapters/httpTransport'
+import { createWebKvStore } from '../adapters/kvStore'
+import { createHttpTransport } from '../adapters/httpTransport'
 import { pdfExtractor } from '../adapters/pdfExtractor'
 import { browserClock, browserIdGen } from '../adapters/system'
 
 let core: SynapseCore | null = null
+let kv: CachedKvStore | null = null
+let booting: Promise<void> | null = null
 
+/**
+ * 初始化 core。必须在使用 getCore() 之前 await 完成：
+ * 存储是异步后端（IndexedDB），内存镜像要先装满数据，否则首屏会读到空。
+ */
+export function initCore(): Promise<void> {
+  if (!booting) {
+    booting = bootCore()
+  }
+  return booting
+}
+
+async function bootCore(): Promise<void> {
+  let store: CachedKvStore
+  try {
+    store = await createWebKvStore()
+    kv = store
+  } catch (error) {
+    // 存储整条链路都不可用时也要能开起来：退化为「纯内存」，本次会话可用、刷新即丢
+    console.error('[Synapse] 存储初始化失败，退化为纯内存模式', error)
+    store = await CachedKvStore.create({
+      load: async () => ({}),
+      save: async () => undefined,
+      remove: async () => undefined,
+    })
+    kv = store
+  }
+
+  core = createSynapseCore({
+    kv: store,
+    http: createHttpTransport(),
+    // 资料库的 PDF 由壳注入 pdf.js 提取，core 只声明 FileExtractor 端口
+    fileExtractor: pdfExtractor,
+    clock: browserClock,
+    idGen: browserIdGen,
+    // 没配 Key 时直接走规则引擎出计划，而不是回一句固定话术
+    config: { offlinePlanFallback: true },
+  })
+  console.log('[Synapse] core 已初始化（Web 端，IndexedDB 缓存存储）')
+}
+
+/** 当前 core；未初始化时抛错（正常流程由 App 在渲染前 await initCore()）。 */
 export function getCore(): SynapseCore {
   if (!core) {
-    core = createSynapseCore({
-      kv: new BrowserKvStore(),
-      http: new BrowserHttpTransport(),
-      // 资料库的 PDF 由壳注入 pdf.js 提取，core 只声明 FileExtractor 端口
-      fileExtractor: pdfExtractor,
-      clock: browserClock,
-      idGen: browserIdGen,
-      // 没配 Key 时直接走规则引擎出计划，而不是回一句固定话术
-      config: { offlinePlanFallback: true },
-    })
-    console.log('[Synapse] core 已初始化（Web 端）')
+    throw new Error('core 尚未初始化：请先 await initCore()')
   }
   return core
 }
 
+/** 立即把内存里的改动写回后端（导出/清空等关键操作后调用）。 */
+export function flushKv(): Promise<void> {
+  return kv ? kv.flush() : Promise.resolve()
+}
+
 export const DEFAULT_USER_ID = 'default'
+
+/** localStorage 中记录当前激活档案的键。 */
+const ACTIVE_USER_KEY = 'synapse.activeUser'
+
+/**
+ * 当前档案 id：多用户是「纯本地多数据桶」，切换只改这个键，
+ * 刷新后所有业务调用都会落到对应的数据桶上。
+ */
+export function getActiveUserId(): string {
+  return window.localStorage.getItem(ACTIVE_USER_KEY) || DEFAULT_USER_ID
+}
+
+export function setActiveUserId(id: string): void {
+  window.localStorage.setItem(ACTIVE_USER_KEY, id)
+}
 
 /** 当前运行模式（deepseek = 已配置 Key；mock = 本地规则模式）。 */
 export function currentRuntimeMode(): { provider: string; model: string; isFallback: boolean } {
@@ -53,8 +108,9 @@ export function buildRunPayload(
   text: string,
   conversationId: string,
   planningMode: 'free' | 'blocks',
+  files: FrontendAttachment[] = [],
 ): StudyPilotRunRequest {
-  const profile = getCore().getProfile(DEFAULT_USER_ID).data as Record<string, unknown> | null
+  const profile = getCore().getProfile(getActiveUserId()).data as Record<string, unknown> | null
   const displayName = String(profile?.['display_name'] ?? '').trim()
   const grade = String(profile?.['grade'] ?? '').trim()
   const userProfile =
@@ -65,7 +121,8 @@ export function buildRunPayload(
   return {
     input: text,
     message: '',
-    files: [],
+    // 聊天附件：由壳先用 core 的 extractFiles 抽好文本，再随本轮请求带进去
+    files,
     userProfile,
     user_profile: null,
     planningMode,
@@ -81,6 +138,16 @@ export interface SavePlanResult {
   message: string
 }
 
+/**
+ * 流式入口：core 的 `runStream` 先产出若干条 stage（进度标签），
+ * 最后一条 done 携带与 `run` 完全一致的完整结果。
+ * 壳侧消费它就能把「正在整理你的需求…」这类等待反馈显示出来，
+ * 不用再干等一个 60 秒的静默请求。
+ */
+export function streamRun(payload: StudyPilotRunRequest): AsyncIterable<CopilotStreamEvent> {
+  return getCore().runStream(payload)
+}
+
 /** 计划自动生效：任何产出计划的响应都立即保存为「当前计划」，界面无需手动再点保存。 */
 export function autoSavePlan(
   response: StudyPilotRunResponse,
@@ -91,7 +158,7 @@ export function autoSavePlan(
   }
 
   const result = getCore().savePlan(
-    DEFAULT_USER_ID,
+    getActiveUserId(),
     {
       message: response.message,
       plan: response.plan ? { weekly_plan: response.plan.weekly_plan } : {},

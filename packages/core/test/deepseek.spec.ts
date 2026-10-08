@@ -87,6 +87,27 @@ describe("DeepSeekLlmProvider", () => {
     });
   });
 
+  it("generateWithTools：arguments 为 null / 非法 JSON 时兜成空参数（不抛出）", async () => {
+    const transport = new FakeTransport(() =>
+      chatResponse({
+        tool_calls: [
+          { function: { name: "create_plan", arguments: "null" } },
+          { function: { name: "tweak_plan", arguments: "{不是 JSON" } },
+        ],
+      }),
+    );
+    const llm = new DeepSeekLlmProvider(OPTIONS, transport);
+
+    const result = await llm.generateWithTools("给我计划", [], "");
+
+    expect(result).toEqual({
+      tool_calls: [
+        { name: "create_plan", args: {} },
+        { name: "tweak_plan", args: {} },
+      ],
+    });
+  });
+
   it("generateWithTools：无 tool_calls 时返回 content；默认 tool_choice=auto", async () => {
     const transport = new FakeTransport(() => chatResponse({ content: "直接回复" }));
     const llm = new DeepSeekLlmProvider(OPTIONS, transport);

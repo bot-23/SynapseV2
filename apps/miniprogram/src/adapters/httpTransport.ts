@@ -67,7 +67,8 @@ export class TaroHttpTransport implements HttpTransport {
       return { status: res.statusCode, body: res.data }
     } catch (error) {
       const friendly = describeRequestError(error)
-      console.error('[Http] 请求失败', req.url, friendly, error)
+      // 不把原始 error 对象打出来：它可能带上含 Authorization 头的请求配置
+      console.error('[Http] 请求失败', req.url, friendly)
       throw new Error(friendly)
     }
   }

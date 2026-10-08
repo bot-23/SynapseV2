@@ -26,11 +26,26 @@ import type {
   TodayPlan,
 } from "../protocol/study";
 import { compute_mastery, summarize_mastery } from "../domain/kgMastery";
+import { build_learning_trends } from "../domain/learningTrends";
+import { search_documents_ranked } from "../domain/hybridRetrieval";
+import {
+  error_item_dedupe_key,
+  normalize_error_item,
+  type ErrorItem,
+} from "../domain/errorBook";
+import {
+  QUIZ_MAX_QUESTIONS,
+  grade_quiz,
+  parse_quiz_json,
+  type QuizQuestion,
+} from "../domain/quiz";
+import { buildQuizPrompt } from "./prompts";
 import {
   list_timetable_subjects,
   parse_timetable_text,
   summarize_day_busy,
 } from "../domain/timetable";
+import { parse_ics_timetable } from "../domain/timetableIcs";
 import {
   REVIEW_ITEM_KEY_PREFIX,
   build_today_items,
@@ -303,6 +318,14 @@ const DEMO_DONE_TASKS: ReadonlyArray<{ dayIndex: number; taskIndex: number }> = 
   { dayIndex: 4, taskIndex: 0 },
 ];
 
+/**
+ * 全局搜索里「会话正文匹配」最多翻多少条会话。
+ * 会话本来就按最近更新排序，而正文匹配是 O(总消息数) 的子串扫描；
+ * 不设上限时，用久了每次搜索都要把所有历史消息全量读一遍。200 条
+ * 足以覆盖「想找的那个会话」，同时让最坏情况有界。
+ */
+const SEARCH_MAX_CONVERSATIONS_SCANNED = 200;
+
 export class SynapseCore {
   readonly store: RuntimeStore;
   readonly workflow: StudyPlanWorkflowService;
@@ -479,6 +502,41 @@ export class SynapseCore {
   }
 
   // ------------------------------------------------------------------
+  // 本地多用户档案（纯本地：切换数据桶，不是真正的账号登录）
+  // ------------------------------------------------------------------
+
+  listUsers(): ApiResponse<Record<string, unknown>> {
+    try {
+      const users = this.store.list_users();
+      return apiOk({ users, total: users.length });
+    } catch (error) {
+      return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  createUser(userId: string, displayName = ""): ApiResponse<Record<string, unknown>> {
+    try {
+      const users = this.store.create_user(userId, displayName);
+      return apiOk({ users, total: users.length }, `已创建档案「${displayName || userId}」`);
+    } catch (error) {
+      return apiFail(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  deleteUser(userId: string): ApiResponse<Record<string, unknown>> {
+    try {
+      if (!userId || userId === "default") {
+        return apiFail("默认档案不能删除");
+      }
+      this.store.delete_all_user_data(userId);
+      const users = this.store.list_users();
+      return apiOk({ users, total: users.length }, "档案已删除");
+    } catch (error) {
+      return apiFail(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 会话 / 消息
   // ------------------------------------------------------------------
 
@@ -580,15 +638,16 @@ export class SynapseCore {
     return extract_attachments(files, this.fileExtractor ?? null, this.idGen);
   }
 
-  getGraphSummary(): ApiResponse<Record<string, unknown>> {
-    return apiOk(this.workflow.get_graph_summary(), "knowledge graph summary");
+  getGraphSummary(userId = "default"): ApiResponse<Record<string, unknown>> {
+    return apiOk(this.workflow.get_graph_summary(userId || "default"), "knowledge graph summary");
   }
 
-  getKnowledgeGraph(): ApiResponse<Record<string, unknown>> {
-    const nodes = this.store.kgNodes();
+  getKnowledgeGraph(userId = "default"): ApiResponse<Record<string, unknown>> {
+    const uid = userId || "default";
+    const nodes = this.store.kgNodes(uid);
     return apiOk({
       nodes,
-      edges: this.store.kgEdges(),
+      edges: this.store.kgEdges(uid),
       document_node_count: nodes.filter((node) => node.id.startsWith("doc_")).length,
     });
   }
@@ -599,7 +658,8 @@ export class SynapseCore {
    */
   getKgMastery(userId = "default"): ApiResponse<Record<string, unknown>> {
     try {
-      const entries = compute_mastery(this.store.kgNodes(), this.store.get_reviews(userId || "default"));
+      const uid = userId || "default";
+      const entries = compute_mastery(this.store.kgNodes(uid), this.store.get_reviews(uid));
       const counts = summarize_mastery(entries);
       const snapshot: KnowledgeMasterySnapshot = {
         entries,
@@ -1218,6 +1278,285 @@ export class SynapseCore {
   }
 
   // ------------------------------------------------------------------
+  // 错题本 + 测验（v2：做题 → 确定性判分 → 错题入本 → 进复习）
+  // ------------------------------------------------------------------
+
+  listErrorItems(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const items = this.store.get_error_items(userId || "default");
+      return apiOk({ items, total: items.length });
+    } catch (error) {
+      return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 手动录入一道错题（判重按 科目+题面）。入本时同步进复习队列。 */
+  addErrorItem(
+    userId: string,
+    payload: {
+      subject?: string;
+      topic?: string;
+      question?: string;
+      answer?: string;
+      userAnswer?: string;
+    },
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const question = (payload.question || "").trim();
+      if (!question) {
+        return apiFail("请填写题目");
+      }
+      const item = normalize_error_item({
+        id: this.idGen.next(),
+        subject: payload.subject || "未分类",
+        topic: payload.topic || payload.subject || "",
+        question,
+        answer: payload.answer || "",
+        userAnswer: payload.userAnswer || "",
+        source: "manual",
+        createdAt: to_date(this.clock.nowIso()),
+      });
+      const existing = this.store.get_error_items(uid);
+      const seen = new Set(existing.map(error_item_dedupe_key));
+      if (seen.has(error_item_dedupe_key(item))) {
+        return apiFail("这道题已经在错题本里了");
+      }
+      this.store.save_error_items(uid, [item, ...existing]);
+      this._enqueue_review(uid, item.subject, item.topic, "practice");
+      return apiOk(
+        { item, items: this.store.get_error_items(uid) },
+        "已加入错题本，并排进复习队列",
+      );
+    } catch (error) {
+      return apiFail(`添加失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  removeErrorItem(userId: string, itemId: string): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const items = this.store.get_error_items(uid).filter((item) => item.id !== itemId);
+      this.store.save_error_items(uid, items);
+      return apiOk({ items, total: items.length }, "已移出错题本");
+    } catch (error) {
+      return apiFail(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 出题：让模型产出「可确定性判分」的选择题。
+   * 没配 Key 或模型返回格式不对时**明确失败**，不会硬凑几道不能判分的题。
+   */
+  async generateQuiz(
+    userId: string,
+    args: { subject: string; topic: string; count?: number },
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    try {
+      const uid = userId || "default";
+      const subject = (args.subject || "").trim();
+      const topic = (args.topic || "").trim();
+      if (!subject || !topic) {
+        return apiFail("请先指定学科与知识点");
+      }
+      const count = Math.max(1, Math.min(10, Math.trunc(args.count ?? 5)));
+      // 用该用户自己的资料作为出题素材（命中知识点时优先依据本人资料）
+      const documents = this.store.get_documents(uid);
+      const context = search_documents_ranked(documents as never, `${subject} ${topic}`, {
+        limit: 4,
+      }).map((hit) => `[${hit.file_name}] ${hit.text}`);
+      const raw = await this.workflow.providers.llm.generateJson(
+        buildQuizPrompt({ subject, topic, count, context }),
+      );
+      const questions = parse_quiz_json(raw, subject, topic);
+      if (!questions.length) {
+        return apiFail("没能生成合格的题目（可能未配置模型 Key，或返回格式不对），请稍后重试");
+      }
+      return apiOk({ questions, subject, topic }, `已出 ${questions.length} 题`);
+    } catch (error) {
+      return apiFail(`出题失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 交卷判分：判分完全离线，错题自动进错题本并排进复习队列。
+   * 这是「学 → 练 → 测 → 补」闭环里此前缺失的最后一段。
+   */
+  submitQuiz(
+    userId: string,
+    body: { questions: QuizQuestion[]; answers: number[] },
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const questions = Array.isArray(body.questions)
+        ? body.questions.slice(0, QUIZ_MAX_QUESTIONS)
+        : [];
+      if (!questions.length) {
+        return apiFail("没有可判分的题目");
+      }
+      const answers = Array.isArray(body.answers) ? body.answers : [];
+      const grade = grade_quiz(questions, answers);
+
+      const existing = this.store.get_error_items(uid);
+      const seen = new Set(existing.map(error_item_dedupe_key));
+      const today = to_date(this.clock.nowIso());
+      const added: ErrorItem[] = [];
+      for (const index of grade.wrong_indexes) {
+        const question = questions[index]!;
+        const picked = Number(answers[index]);
+        const item = normalize_error_item({
+          id: this.idGen.next(),
+          subject: question.subject,
+          topic: question.topic,
+          question: question.stem,
+          answer: question.options[question.answer_index] ?? "",
+          userAnswer: Number.isFinite(picked) ? (question.options[Math.trunc(picked)] ?? "") : "",
+          source: "quiz",
+          createdAt: today,
+        });
+        const dedupe = error_item_dedupe_key(item);
+        if (seen.has(dedupe)) {
+          continue;
+        }
+        seen.add(dedupe);
+        added.push(item);
+        this._enqueue_review(uid, item.subject, item.topic, "practice");
+      }
+      if (added.length) {
+        this.store.save_error_items(uid, [...added, ...existing]);
+      }
+
+      return apiOk(
+        {
+          grade,
+          wrong_items: added,
+          error_total: existing.length + added.length,
+        },
+        added.length
+          ? `得分 ${grade.score}，${added.length} 道错题已进错题本`
+          : `得分 ${grade.score}，没有新的错题`,
+      );
+    } catch (error) {
+      return apiFail(`判分失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 全局搜索（资料 / 错题 / 会话）
+  // ------------------------------------------------------------------
+
+  /**
+   * 一处搜三样：资料命中（BM25 + 文件名/科目兜底）、错题本、会话（标题 + 消息正文）。
+   *
+   * 全部离线可复现，不调模型 —— 搜索是高频操作，不该每次都等一次网络往返。
+   */
+  searchAll(userId = "default", query: string, limit = 10): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const text = String(query ?? "").trim();
+      if (!text) {
+        return apiFail("请输入搜索内容");
+      }
+      const capped = Math.max(1, Math.min(50, Math.trunc(limit || 10)));
+      const needle = text.toLowerCase();
+
+      // 1) 资料：先走 BM25 检索，再用文件名/科目/标签做一次兜底（文件名往往不在正文里）
+      const documentRecords = this.store.get_documents(uid);
+      const docResults = new Map<string, Record<string, unknown>>();
+      for (const hit of search_documents_ranked(documentRecords as never, text, {
+        limit: capped * 2,
+        perDocument: 1,
+      })) {
+        docResults.set(`doc:${hit.doc_id}`, {
+          doc_id: hit.doc_id,
+          file_name: hit.file_name,
+          subject: hit.subject,
+          excerpt: hit.text.slice(0, 120),
+          score: Math.round(hit.score * 100) / 100,
+        });
+      }
+      for (const doc of documentRecords) {
+        const docId = String(doc["doc_id"] ?? "");
+        const key = `doc:${docId}`;
+        if (!docId || docResults.has(key)) {
+          continue;
+        }
+        const tags = Array.isArray(doc["tags"]) ? (doc["tags"] as unknown[]).join(" ") : "";
+        const haystack = [doc["file_name"], doc["subject"], tags]
+          .map((value) => String(value ?? ""))
+          .join(" ")
+          .toLowerCase();
+        if (haystack.includes(needle)) {
+          docResults.set(key, {
+            doc_id: docId,
+            file_name: String(doc["file_name"] ?? ""),
+            subject: String(doc["subject"] ?? ""),
+            excerpt: String(doc["excerpt"] ?? "").slice(0, 120),
+            score: 0,
+          });
+        }
+      }
+      const documents = [...docResults.values()].slice(0, capped);
+
+      // 2) 错题本：题面/答案/科目上做子串匹配
+      const errors = this.store
+        .get_error_items(uid)
+        .filter((item) =>
+          [item.subject, item.topic, item.question, item.answer, item.user_answer]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle),
+        )
+        .slice(0, capped);
+
+      // 3) 会话：标题/科目命中，或消息正文里命中（正文命中给一段上下文片段）
+      //    会话按最近更新排序，正文扫描只取最近的一批，避免历史会话无上限地把搜索拖慢
+      const conversations: Array<Record<string, unknown>> = [];
+      const scannedConversations = this.store
+        .list_conversations(uid)
+        .slice(0, SEARCH_MAX_CONVERSATIONS_SCANNED);
+      for (const conversation of scannedConversations) {
+        if (conversations.length >= capped) {
+          break;
+        }
+        const title = `${conversation.title} ${conversation.subject}`.toLowerCase();
+        if (title.includes(needle)) {
+          conversations.push({
+            id: conversation.id,
+            title: conversation.title,
+            subject: conversation.subject,
+            updated_at: conversation.updated_at,
+            snippet: "",
+          });
+          continue;
+        }
+        const hit = this.store
+          .get_messages(conversation.id)
+          .find((message) => String(message.content ?? "").toLowerCase().includes(needle));
+        if (hit) {
+          conversations.push({
+            id: conversation.id,
+            title: conversation.title,
+            subject: conversation.subject,
+            updated_at: conversation.updated_at,
+            snippet: String(hit.content ?? "").slice(0, 120),
+          });
+        }
+      }
+
+      return apiOk({
+        query: text,
+        documents,
+        errors,
+        conversations,
+        total: documents.length + errors.length + conversations.length,
+      });
+    } catch (error) {
+      return apiFail(`搜索失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 资料库（v2：粘贴导入 + BM25 本地检索）
   // ------------------------------------------------------------------
 
@@ -1338,7 +1677,7 @@ export class SynapseCore {
       if (!nodeIds.length) {
         return apiFail("这份资料还没有图谱知识点，请先构建图谱");
       }
-      const nodeById = new Map(this.store.kgNodes().map((node) => [node.id, node]));
+      const nodeById = new Map(this.store.kgNodes(uid).map((node) => [node.id, node]));
       const reviews = this.store.get_reviews(uid);
       const knownKeys = new Set(reviews.map((item) => item.key));
       const today = to_date(this.clock.nowIso());
@@ -1576,10 +1915,10 @@ export class SynapseCore {
           completed_tasks: completedTasks,
           due_reviews: dueItems.length,
           graph: {
-            node_count: this.store.kgNodes().length,
-            edge_count: this.store.kgEdges().length,
+            node_count: this.store.kgNodes(uid).length,
+            edge_count: this.store.kgEdges(uid).length,
             document_node_count: this.store
-              .kgNodes()
+              .kgNodes(uid)
               .filter((node) => node.id.startsWith("doc_")).length,
           },
           assignment_count: assignmentSnapshot.total,
@@ -1943,14 +2282,86 @@ export class SynapseCore {
             assignments: this.store.get_assignments(uid).length,
             reviews: this.store.get_reviews(uid).length,
             conversations: conversationCount,
-            kg_nodes: this.store.kgNodes().length,
-            kg_edges: this.store.kgEdges().length,
+            kg_nodes: this.store.kgNodes(uid).length,
+            kg_edges: this.store.kgEdges(uid).length,
           },
         },
         "数据已导出",
       );
     } catch (error) {
       return apiFail(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 导入此前导出的 JSON，把数据恢复到本机（换设备 / Web ↔ 小程序迁移）。
+   *
+   * 只恢复文件里出现的数据集；API Key 不随文件迁移，导入后需要重新填写。
+   * 「纯本地」路线下，这是数据可迁移的唯一现实路径——否则数据只出得去、回不来。
+   */
+  importData(
+    userId: string,
+    payload: Record<string, unknown>,
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const result = this.store.import_user_data(userId || "default", payload);
+      if (!result.total) {
+        return apiFail("这份文件里没有可导入的数据（可能不是 Synapse 导出的 JSON）");
+      }
+      return apiOk(
+        result as unknown as Record<string, unknown>,
+        `已导入 ${result.total} 项数据，刷新页面后生效`,
+      );
+    } catch (error) {
+      return apiFail(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 记忆（用户可见、可删）
+  // ------------------------------------------------------------------
+
+  /** AI 记住的关于你的内容（弱项/偏好/情绪/约束等）——此前完全不可见。 */
+  listMemories(userId = "default"): ApiResponse<Record<string, unknown>> {
+    try {
+      const memories = this.store.get_memories(userId || "default");
+      return apiOk({ memories, total: memories.length });
+    } catch (error) {
+      return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 删除一条记忆：记错了要能纠正。weak_points 传 value 只删该条。 */
+  deleteMemory(
+    userId: string,
+    kind: string,
+    value = "",
+  ): ApiResponse<Record<string, unknown>> {
+    try {
+      const memories = this.store.delete_memory(userId || "default", kind, value);
+      return apiOk({ memories, total: memories.length }, "已删除这条记忆");
+    } catch (error) {
+      return apiFail(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 学习趋势（随时间变化的曲线，不是单一窗口快照）
+  // ------------------------------------------------------------------
+
+  /** 最近 N 天的完成度曲线 + 各科目能力值走势。 */
+  getTrends(userId = "default", days = 30): ApiResponse<Record<string, unknown>> {
+    try {
+      const uid = userId || "default";
+      const trends = build_learning_trends({
+        progress: this.store.get_progress(uid),
+        assessments: this.store.get_assessments(),
+        today: to_date(this.clock.nowIso()),
+        days,
+      });
+      return apiOk(trends as unknown as Record<string, unknown>);
+    } catch (error) {
+      return apiFail(`读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -1994,6 +2405,19 @@ export class SynapseCore {
     try {
       const result = parse_timetable_text(text, { idGen: this.idGen });
       return apiOk(result, `识别出 ${result.entries.length} 节课`);
+    } catch (error) {
+      return apiFail(`解析失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 解析 ICS 日历文件（教务/手机日历导出），供课表页导入后保存。 */
+  parseTimetableIcs(text: string): ApiResponse<TimetableParseResult> {
+    try {
+      const result = parse_ics_timetable(text, { idGen: this.idGen });
+      const message = result.entries.length
+        ? `从日历里识别出 ${result.entries.length} 节课`
+        : result.warnings[0] ?? "没能识别出课程";
+      return apiOk(result, message);
     } catch (error) {
       return apiFail(`解析失败：${error instanceof Error ? error.message : String(error)}`);
     }

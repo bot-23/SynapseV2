@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { onboard, sendGoalUntilPlan } from './helpers'
 
 test.describe('对话——混合模式', () => {
@@ -11,6 +14,45 @@ test.describe('对话——混合模式', () => {
     await expect(page.locator('.message-row.user .message-bubble').first()).toContainText(goal)
     await expect(page.locator('.ai-badge').last()).toHaveText('AI 生成')
     await expect(page.locator('.plan-card').first()).toBeVisible()
+  })
+
+  test('流式等待：先显示 stage 进度，再逐字吐出回复', async ({ page }) => {
+    await onboard(page)
+
+    await page
+      .locator('.composer textarea')
+      .fill('我想提升英语四级词汇和阅读，前提是每天只有 45 分钟')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    // 打字机光标只存在于流式草稿气泡里；它出现就说明「stage → 逐字渲染」这条链路走通了。
+    // 草稿会持续约 1.9 秒，比 stage 气泡（很快被结果替换）更容易稳定断言。
+    await expect(page.locator('.typing-caret')).toBeVisible({ timeout: 30_000 })
+
+    // 打字结束后草稿退场，落库的正式消息接上
+    await expect(page.locator('.typing-caret')).toHaveCount(0, { timeout: 30_000 })
+    await expect(page.locator('.ai-badge').first()).toHaveText('AI 生成')
+  })
+
+  test('聊天附件：带上资料一起发送，气泡保留附件名', async ({ page }) => {
+    await onboard(page)
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-chat-att-'))
+    const filePath = path.join(dir, '高数笔记.txt')
+    fs.writeFileSync(filePath, '导数：含参函数单调性讨论要先求导，再按参数分类讨论。', 'utf-8')
+
+    // 隐藏的 file input 通过 setInputFiles 触发；附件由 core.extractFiles 抽好文本
+    await page.setInputFiles('input.chat-attach-input', filePath)
+    await expect(page.locator('.composer-attachments .attachment-chip')).toContainText('高数笔记.txt')
+
+    await page.locator('.composer textarea').fill('按这份笔记帮我安排一周复习')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    // 发送后：输入框上的待发 chip 清空，消息气泡里保留附件名
+    await expect(page.locator('.composer-attachments')).toHaveCount(0)
+    await expect(page.locator('.message-attachments .attachment-chip').first()).toContainText(
+      '高数笔记.txt',
+    )
+    await expect(page.locator('.ai-badge').last()).toHaveText('AI 生成', { timeout: 30_000 })
   })
 
   test('积木模式：澄清 → 出积木块 → 展开成一周安排', async ({ page }) => {

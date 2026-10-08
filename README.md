@@ -49,12 +49,12 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 
 最近一次验证结果：
 
-- core 单元测试、边界与压力测试：**144/144 通过**
+- core 单元测试、边界与压力测试：**161/161 通过**
 - core、小程序与 Web TypeScript 类型检查：通过
-- vendor 导入边界：通过（core 对外导出 199 个，检查 35 个壳文件）
-- Web Playwright 端到端测试：**38/38 通过**（含品牌图标、页面导航、移动端宽度、知识图谱动画与分簇）
+- vendor 导入边界：通过（core 对外导出 203 个，检查 39 个壳文件）
+- Web Playwright 端到端测试：**40/40 通过**（含品牌图标、页面导航、移动端宽度、知识图谱动画与分簇、对话流式等待、对话带附件）
 - Web 生产构建、微信小程序生产构建：通过
-- 微信小程序已上传体验版（1.0.1）
+- 微信小程序已上传体验版（1.0.2）
 
 > 自动化测试覆盖 core 行为，不等于所有微信原生交互都已真机验收。`chooseMessageFile`、网络合法域名、云开发 AI 等仍受微信运行环境影响。
 
@@ -85,7 +85,7 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 | 苏格拉底提示 | ✅ | 复习卡先给「提示我」再给答案：三级递进（知识点方向 → 解题思路 → 关键步骤），三级用完才解锁「查看答案」；答案只从图谱节点说明或你自己的资料里取，取不到就直说没有；模型产出会过一道泄露守门员（与答案连续重合 6 字即判定泄露，换成本地提示并计数），没配 Key 或调用失败则整组降级为离线提示。提示按卡缓存在 `hint_texts`，离线与泄露替换的提示不入缓存 |
 | 课程表 | ✅ | 粘贴文本解析（钟点或「第 N-M 节」，后者按默认作息表换算）、自动分列教室与教师、手动录入、逐条校正；计划按空闲时间压缩任务量 |
 | 资料库 | ✅ | 支持粘贴文本、多选 `.txt` / `.md` / `.pdf` 批量导入（逐个返回成功/失败，单个失败不阻塞其他）、超限明确提示、中文解码、切片与删除 |
-| PDF 导入（Web） | ✅ | 壳注入 pdf.js 逐页抽取文字（动态 import 分包，主包只涨 2KB）；CMap 由 `scripts/copy-pdfjs-cmaps.mjs` 从 node_modules 复制到本地静态目录，中文 CID 字体不乱码，且不依赖外网 CDN |
+| PDF 导入 | ✅ | 两端都支持。Web 注入 pdf.js 并把 CMap 放本地目录（中文 CID 不乱码、不依赖 CDN）；小程序把 pdf.js 放进**资料库分包**（主包只留几十行的转发插座），主包体积不受影响 |
 | 资料结构化元数据 | ✅ | 每份资料带科目（关键词表自动推断，可手改）、标签、来源（上传/粘贴）、字数、图谱节点数与复习卡数；旧数据读取侧补默认值，不需要迁移 |
 | 资料自动构图 | 🧪 | 每份资料可显式构建图谱；有 Key 时由模型抽取，无 Key/调用失败时降级为本地 bigram 高频词；构图后把节点 ID 回写到资料上 |
 | 图谱可视化 | ✅ | Web 使用 SVG、小程序使用 Canvas 环形布局；支持节点分类着色与点击查看说明 |
@@ -120,7 +120,7 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 | 我的 | `pages/mine/index` | Tab | 按「今日状态 → 学习资产 → 设置」分三组：仪表盘、AI 学情周报、科目、课程表/资料库/作业/图谱入口、画像、AI 模型接入（Key 默认收起）、云开发 AI 自检、数据导出、演示数据与数据清理入口 |
 | 历史会话 | `pages/conversations/index` | 二级页 | 新建、切换、长按删除会话 |
 | 课程表 | `pages/timetable/index` | 二级页 | 文本解析、手动录入、校正、保存 |
-| 资料库 | `pages/documents/index` | 二级页 | 粘贴或选择 TXT/MD（可多选）、查看元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除（PDF 仅 Web 端支持） |
+| 资料库 | `packageDocuments/index` | 分包 | 粘贴或选择 TXT/MD/PDF（可多选）、查看元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除。pdf.js 与实现都在这个分包里，主包只留一个转发插座 |
 | 作业清单 | `pages/assignments/index` | 二级页 | 粘贴作业原话排期、按截止日分组、倒计时、打卡、黄色「可能逾期」预警、逾期重新排期、未来 7 天日程、生成作业包短码、扫一扫/粘码导入 |
 | 知识图谱 | `pages/graph/index` | 二级页 | 环形可视化节点与关系、按掌握度着色 + 四色图例、点击节点查看说明与判定理由 |
 | 云开发 AI 自检 | `pages/cloudcheck/index` | 实验页 | 探测 provider/model、思考模式、工具调用、JSON mode、流式输出 |
@@ -144,9 +144,10 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 
 | 能力 | 当前边界 |
 | --- | --- |
-| 资料格式 | Web 端开放 `.txt` / `.md`（含 `.markdown` / `.mdx`）/ `.pdf`；小程序端仍只有文本类（未接 pdf.js）。core 通过 `ports/FileExtractor` 分发，PDF 提取器由壳注入 |
-| PDF 抽取 | Web 端由 pdf.js 逐页取 textContent；扫描件（图片版 PDF）**没有文字层，抽不出内容**，会给出「可能是扫描件，当前不支持 OCR」的明确提示而不是静默空结果 |
+| 资料格式 | 两端都开放 `.txt` / `.md`（含 `.markdown` / `.mdx`）/`.pdf`。core 通过 `ports/FileExtractor` 分发，PDF 提取器由壳注入 |
+| PDF 抽取 | 两端都由 pdf.js 逐页取 textContent；扫描件（图片版 PDF）**没有文字层，抽不出内容**，会给出「可能是扫描件，当前不支持 OCR」的明确提示而不是静默空结果。小程序端不带 CMap：字体自带 ToUnicode 的中文 PDF 正常，依赖预定义 CJK CMap 的老式 PDF 可能缺字 |
 | PDF 体量 | 文本类文件上限 2MB，PDF 上限 30MB；抽取文字仍受 core 的 20 万字索引上限约束，超出即停止翻页 |
+| 小程序包体积 | pdf.js（约 1.7MB）放在资料库分包里，主包约 0.8MB；进资料库页时才会下载该分包 |
 | 中文编码 | TXT 按 UTF-8 → GBK → GB2312 尝试；最终退回 UTF-8 宽松解码 |
 | 资料长度 | 单文件界面限制 2MB；core 单份资料最多索引 20 万字（超出部分不参与检索，不再静默截断到 6000 字） |
 | 作业日期解析 | 离线词表覆盖 今天/明天/后天/大后天、周X/星期X/礼拜X、下周X、M月D日、M/D、D号、「还有 X 天」；更绕的说法（「隔周周二」「下下周五」）需配上 Key 由模型抽取，解析不出会走澄清追问而不是静默丢弃 |
@@ -163,8 +164,8 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 | “资料未覆盖”提示 | 有命中片段时提示词要求模型不得补写；完全未命中时为保护冻结基线，仍沿用旧教学提示词 |
 | 模型服务 | 正式主链路只接 DeepSeek 直连；Key 保存在本机 KV 中，没有服务端代管 |
 | 云开发 AI | 只有能力自检页，尚未成为正式 `LlmProvider`，不会替代 DeepSeek 主链路 |
-| 流式输出 | core 和 DeepSeek provider 已有流式接口与 SSE 测试；聊天 UI 当前仍等待整条响应 |
-| 数据容量 | 微信本地存储通常约 10MB；尚无自动归档、跨设备同步或云端备份 |
+| 流式输出 | core 的 `runStream` 会先产出若干条 stage 进度、最后一条 done 带完整结果；两端对话都已消费它（进度气泡 + 逐字渲染）。**token 级流式还没有**：`streamText` 接口在 provider 里已就绪但工作流未接，需要扩 core 协议 |
+| 数据容量 | Web 端已迁到 **IndexedDB**（`synapse` 库，上限通常数百 MB 起）；小程序仍受 `Taro.storage` 约 10MB 限制。尚无自动归档、跨设备同步或云端备份 |
 | 平台范围 | 目前交付的是 Taro 微信小程序；支付宝/抖音依赖已存在，但未做完整平台验收 |
 
 ---
@@ -175,22 +176,51 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 
 | 能力 | 状态 | 缺口 |
 | --- | --- | --- |
-| PDF 导入（小程序） | 🧩 | core 的 `FileExtractor` 端口与 `.pdf` 分发已就绪（Web 端已接入 pdf.js，见上）；小程序端未接 pdf.js，没有 PDF 选择入口 |
-| 聊天附件 | ⏳ | 聊天请求仍固定 `files: []`；资料只能先在资料库导入 |
+| 聊天附件 | ✅ | 对话页可带 1–3 份资料（txt / md / pdf）一起发送：壳先用 core 的 `extractFiles` 抽出文本，随本轮请求带进 core，自动落库为资料并把摘要写进本轮偏好。小程序端 PDF 需先进入过资料库（pdf.js 在分包内） |
 | 图片/OCR/Word/Markdown | ⏳ | 没有解析器与 UI 入口（`.md` 作为纯文本已支持） |
-| 聊天流式打字机 | 🧩 | core 有 `runStream`，壳未消费流事件 |
+| 聊天流式打字机 | 🧩 | stage 进度与逐字渲染已交付；**token 级流式**还缺（core 的 `streamText` 未被工作流消费，需要扩 SSE 协议） |
 | 推送提醒 | 🧩 | `NotifierProvider` 当前是 mock，没有订阅消息或系统通知实现；作业逾期只做清单标红 |
-| 真实日历同步 | 🧩 | `CalendarProvider` 当前只做截止日期提示，没有系统日历读写 |
+| 真实日历同步 | ✅ | 小程序课表页「同步到系统日历」把每节课写成系统日历的**每周重复事件**（`wx.addPhoneRepeatCalendar`，含提前 15 分钟提醒；周次「1-16」换算成重复周数）。`CalendarProvider` 仍只做截止日期提示；**反向读取（把系统日历/课程平台导入进来）还没有** |
 | 云开发 AI 正式接入 | 🧪 | 自检页只验证能力；尚未实现 Provider、配置切换与回归测试 |
 | 用户账号与登录 | ⏳ | 当前固定本地用户 `default`，没有微信登录、账号体系或多用户切换 |
 | 跨设备同步/云备份 | ⏳ | 全部业务数据仅在当前设备 KV 中；已有导出，但没有导入恢复入口 |
 | 数据导入/恢复 | ⏳ | 已支持 JSON 导出；没有把导出文件读回来的「恢复」入口 |
-| Web 应用 | ✅ | `apps/web`：Vite + React 单页壳，复用 `@synapse/core`，localStorage 适配器、离线规则模式、资料/课程表/作业/计划/复习/仪表盘均可用 |
+| Web 应用 | ✅ | `apps/web`：Vite + React 单页壳，复用 `@synapse/core`，**IndexedDB 异步存储**（内存镜像 + 防抖写回，自动从 localStorage 迁移旧数据）、离线规则模式、资料/课程表/作业/计划/复习/仪表盘均可用 |
 | 桌面应用 | ⏳ | Tauri 壳、文件系统 KV 适配器和旧 SQLite 迁移器尚未实现 |
 | Android 应用 | ⏳ | Tauri Mobile / Kotlin 薄壳均未实现 |
 | HTTP/SSE 服务端 | ⏳ | 协议可映射为 HTTP，但当前只有进程内调用，不提供服务器 |
 | 向量检索 | ⏳ | 没有 embedding 模型、向量库或语义召回 |
-| Web UI 自动化测试 | 🧪 | Playwright e2e 共 34 条，覆盖引导/对话（含 AI 依据展开）/计划/资料导入（含 .md、批量上传、PDF 抽取）/资料构图/图谱（掌握度着色）/演示数据幂等与清空归零/移动端导航与宽度/「我的」页分组与 Key 收起/课程表（含节次）/作业（对话排期、打卡、倒计时、逾期风险、作业包扫码）/复习苏格拉底提示/学情周报/品牌图标；微信原生交互仍需真机验收 |
+| Web UI 自动化测试 | 🧪 | Playwright e2e 共 40 条，覆盖引导/对话（含 AI 依据展开、流式等待与逐字渲染、带附件发送）/计划/资料导入（含 .md、批量上传、PDF 抽取）/资料构图/图谱（掌握度着色、动画与分簇）/演示数据幂等与清空归零/移动端导航与宽度/「我的」页分组与 Key 收起/课程表（含节次）/作业（对话排期、打卡、倒计时、逾期风险、作业包扫码）/复习苏格拉底提示/学情周报/品牌图标；微信原生交互仍需真机验收 |
+
+---
+
+## 安全
+
+安全是第一优先级（回归用例见 [security.spec.ts](packages/core/test/security.spec.ts)）。以下是本仓库做过的加固与仍然存在的边界。
+
+### 已加固
+
+| 项 | 做法 |
+| --- | --- |
+| 密钥不出本机 | API Key 只存本机 KV（小程序 storage / 浏览器 IndexedDB），只作为 `Authorization` 头发给 `https://api.deepseek.com`；不进 URL、不进日志、不进导出（`export_user_data` 会剔除 `api_key`） |
+| 密钥不回显 | 所有失败响应经 `apiFail` 统一把 `sk-…` 片段打码（[frontend.ts](packages/core/src/protocol/frontend.ts)）；传输层即使把整个请求塞进错误文本也不会漏 Key |
+| 原型污染 | 动态键（`task_key` / `user_id` / `conversation_id` / `session_id`）写存储前校验 `__proto__` / `constructor` / `prototype`，读取时跳过 |
+| 脏存储不崩 | 本地存储形状不对（被改成字符串/对象）时，`RuntimeStore` 的读取回落默认值并跳过坏行，不再 `as T` 硬转 |
+| 写入封顶 | 能力评测快照 ≤200 条、计划版本 30 版、周报 8 期；模型/短码产出的作业条数（≤60）与字段长度（≤200 / 60）全部封顶；PDF 解析限 400 页 / 20 万字 |
+| 短码消毒 | 作业包解码侧与编码侧一致地截断字段、收口数值，格式不对只丢那一行 |
+| 无 XSS 面 | 两端都不使用 `dangerouslySetInnerHTML` / `innerHTML` / `eval` / `new Function`；模型与导入文本一律以文本节点渲染 |
+| 演示服务器 | `serve.cjs` 的目录穿越校验要求路径等于 dist 或以 `dist/` 开头（防同级目录前缀绕过），非法编码返回 400 而不是打崩进程 |
+| 隐私日志 | 用户输入原文、澄清答案不再写进 `console`（只记长度/条数） |
+| 开发服务器 | Vite 默认只监听 `127.0.0.1`；小程序上传不再附带 source map |
+
+### 仍然存在的边界（知情取舍）
+
+| 项 | 说明 |
+| --- | --- |
+| Key 明文落盘 | 纯客户端应用，Key 存在本机 KV 里（无服务端代管、无设备级加密）。设备被物理接触或同源脚本注入即可读取；这是当前架构的取舍 |
+| 本地数据无鉴权 | 只有单本地用户 `default`，KV 无访问控制；账号体系落地前，数据隔离依赖设备本身 |
+| 作业包无签名 | 首行 `SYNAPSE-ASG/1` 只用于「识别这是不是作业包」，不是防伪签名；扫码导入的是**数据**（有长度上限、渲染为文本），不涉及代码执行 |
+| 微信原生能力 | 订阅消息、系统日历、文件选择等仍需真机验收 |
 
 ---
 
@@ -203,7 +233,7 @@ core 通过接口而不是平台全局 API 获取外部能力。替换实现时�
 | LLM | `DeepSeekLlmProvider` / 离线规则 provider | 其他 OpenAI 兼容模型、云开发 AI、本地模型 | `providers/contracts.ts`、`providers/build.ts` |
 | 网络 | 小程序 `Taro.request` | Web `fetch`、Tauri HTTP、Node HTTP | `ports/HttpTransport` |
 | 流式传输 | DeepSeek SSE 协议 | 小程序 chunked、Web SSE、WebSocket | `ports/StreamTransport` |
-| 存储 | 小程序 `Taro.storage` KV | IndexedDB、Tauri fs、SQLite、云 KV | `storage/kv.ts`、壳 `adapters/` |
+| 存储 | 小程序 `Taro.storage`（同步）/ Web IndexedDB（异步，经 `CachedKvStore` 镜像） | Tauri fs、SQLite、云 KV | `storage/kv.ts`（`KvStore` + `KvBackend` + `CachedKvStore`）、壳 `adapters/` |
 | 资料提取 | core 内置 TXT 解码 | 注入 pdf.js、OCR、Office 转文本 | `ports/FileExtractor`、`application/fileExtract.ts` |
 | 检索 | 本地知识图谱 + BM25 | embedding、远程搜索、混合排序 | `RetrievalProvider`、`domain/bm25.ts` |
 | 日历 | mock 截止日期提示 | 系统日历、课程平台 API | `CalendarProvider` |
@@ -275,17 +305,17 @@ npm run typecheck
 | --- | --- | --- | --- |
 | 语言 | TypeScript | ^5.6（strict） | 全仓库唯一语言 |
 | 包管理 | npm workspaces | — | monorepo，`packages/*` + `apps/*` |
-| 测试 | Vitest | ^3.0 | 128 个测试，含黄金样本回放与压力测试 |
+| 测试 | Vitest | ^3.0 | 144 个测试，含边界与压力测试 |
 | 核心 | 纯 TypeScript | — | `@synapse/core`，**零运行时依赖** |
 | 小程序壳 | Taro | 4.1.9 | React 18 + SCSS Modules，微信小程序为主 |
 | Web 壳 | Vite + React | ^5.4 / ^18 | `apps/web`，浏览器单页，直接复用 core |
-| PDF 解析 | pdfjs-dist | ^6.3 | **仅 Web 壳**注入 `ports/FileExtractor`；动态 import 分包（主包 +2KB），CMap 走本地目录，不依赖外网 CDN |
+| PDF 解析 | pdfjs-dist | ^6.3 | 两端各自注入 `ports/FileExtractor`：Web 走动态 import + 本地 CMap 目录；小程序走 legacy 构建 + 主线程 fake worker，文件放在资料库分包里（`scripts/copy-pdfjs-vendor.mjs` 生成，不入库） |
 | UI | React | ^18 | 函数组件 + Hooks |
 | 状态 | Zustand | ^4.5 | 页面级状态 |
 | 工具库（壳） | dayjs / classnames | ^1.11 / ^2.5 | 仅壳内使用，不进 core |
 | 构建 | Webpack | 5.91.0 | 由 Taro 驱动 |
 | 模型接入 | DeepSeek（OpenAI 兼容） | — | `POST {base_url}/chat/completions`，Bearer 认证 |
-| 本地存储 | KV 抽象 | — | 小程序走 `Taro.storage`，Web 走 `localStorage` |
+| 本地存储 | KV 抽象 | — | 小程序走 `Taro.storage`（同步），Web 走 IndexedDB（异步，用 `CachedKvStore` 做内存镜像） |
 | 平台配置 | `miniprogram-ci` | ^2.1.26 | 小程序上传/预览 |
 
 核心包的依赖表是**空的** —— 这不是巧合，而是硬性约束（见 §3）。
@@ -305,16 +335,17 @@ SynapseNext/
 │       │   ├── ports/            # 端口定义：core 访问平台的唯一出口
 │       │   ├── providers/        # LLM / 检索 / 日历 / 通知 适配器
 │       │   └── storage/          # KV 之上的运行时存储（含键空间）
-│       └── test/                 # 7 个测试文件，143 个用例
+│       └── test/                 # 9 个测试文件，161 个用例（含 security.spec.ts / storage.spec.ts）
 ├── apps/
 │   ├── miniprogram/              # Taro 微信小程序壳
 │       └── src/
-│           ├── adapters/         # 端口实现：HttpTransport / KvStore
+│           ├── adapters/         # 端口实现：HttpTransport / KvStore / FileExtractor 插座 / pdf 兼容层 / 系统日历
 │           ├── vendor/core/      # core 的同步副本（脚本生成，勿手改）
-│           ├── pages/            # 9 个页面（3 个 Tab + 6 个启动/二级/实验页）
+│           ├── pages/            # 8 个主包页面（3 个 Tab + 启动/二级/实验页）
+│           ├── packageDocuments/ # 资料库分包：页面 + pdf.js 实现 + 构建产物 vendor（不入库）
 │           ├── components/       # 计划、积木计划、澄清卡片
 │           └── services/         # 壳侧封装，对接 vendor/core
-│   └── web/                      # Vite + React Web 壳
+│   └── web/                      # Vite + React Web 壳（IndexedDB 异步存储）
 └── scripts/                      # sync-core-to-miniprogram / check-vendor-imports
 ```
 
@@ -351,12 +382,14 @@ core 只声明接口，由壳注入实现（[ports/index.ts](packages/core/src/p
 | --- | --- | --- |
 | `HttpTransport` | 普通 HTTP 请求 | `Taro.request`（包 `wx.request`） |
 | `StreamTransport` | SSE 流式逐块产出 | 同上（流式） |
-| `FileExtractor` | PDF 等二进制取文本 | 预留；TXT 在 core 解码，PDF 尚未注入 |
+| `FileExtractor` | PDF 等二进制取文本 | pdf.js 注入（分包内 legacy 构建 + 主线程 fake worker）；TXT 在 core 解码 |
 | `Clock` | 时间源 | 真实时间，测试注入固定值 |
 | `IdGen` | ID 生成 | 小程序注入 UUID v4 风格随机 ID，测试注入序列 |
-| `KvStore` | 键值持久化 | `Taro.getStorageSync` 等 |
+| `KvStore` | 键值持久化（同步） | `Taro.getStorageSync` 等 |
 
 小程序的核心组装只依赖少量 `adapters/`。换平台时重写这些适配器与 UI 即可，计划、检索、复习、存储编排等 core 逻辑无需复制。
+
+**异步存储**（Web 的 IndexedDB、以后桌面的 SQLite）不改变上面这个同步接口：core 另提供 `KvBackend`（异步后端）+ `CachedKvStore`（内存镜像），壳只需实现一个约 60 行的 backend，`RuntimeStore` 与全部业务代码零改动 —— 见 [storage/kv.ts](packages/core/src/storage/kv.ts)。
 
 ---
 
@@ -391,7 +424,9 @@ core 只声明接口，由壳注入实现（[ports/index.ts](packages/core/src/p
 
 ## 5. 存储：KV 键空间
 
-core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeStore.ts](packages/core/src/storage/runtimeStore.ts)）。小程序端上限约 10MB。
+core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeStore.ts](packages/core/src/storage/runtimeStore.ts)）。小程序端上限约 10MB；**Web 端已换成 IndexedDB**（`synapse` 库），上限通常数百 MB 起，老数据会在首次启动时自动从 localStorage 迁移过来。
+
+> Web 端想清空数据：用应用内「我的 → 清空数据」，或在 DevTools → Application → IndexedDB 里删掉 `synapse` 库。注意 `localStorage` 里只剩壳层私有项（引导标记 `synapse.web:onboarded`、侧边栏宽度、会话卡片），清它不会影响业务数据。
 
 | 键 | 内容 |
 | --- | --- |
@@ -419,7 +454,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 这是一个 **LLM 编排 + 规则引擎主导的确定性工作流**。它已经具备本地资料检索增强，但不是依赖 embedding 与向量数据库的通用 RAG 平台：
 
-- **规则引擎是骨架。** 计划的天数、每天时长、任务切片、顺延、里程碑划分都由确定性算法产出，可被黄金样本逐字复现。
+- **规则引擎是骨架。** 计划的天数、每天时长、任务切片、顺延、里程碑划分都由确定性算法产出，可被单元测试逐字复现。
 - **LLM 负责理解与措辞。** 识别意图、抽取学习目标、生成 `focus` 短语、把结构化结果说成人话。
 - **检索是“增强”而非“主体”。** 知识图谱与用户上传资料走本地检索；命中资料时，计划和教学提示词会带上片段与文件名。
 - **上下文有来源配额。** 资料最多保底 3 条、课程表 2 条、执行记录/画像/图谱各 1 条，避免图谱结果按位置把用户资料挤出窗口。
@@ -488,7 +523,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 | 门禁 | 命令 | 现状 |
 | --- | --- | --- |
-| 单元 + 流程 + 压力测试 | `npm test` | 143/143 通过 |
+| 单元 + 流程 + 压力测试 | `npm test` | 161/161 通过 |
 | 类型检查 | `npm run typecheck` | 通过（core + 小程序壳 + Web） |
 | core 边界规则 | 含在 `npm test` | 通过 |
 | vendor 边界校验 | `npm run check:vendor` | 通过（对外名 199 个） |
@@ -515,7 +550,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 ```bash
 npm install                           # 拉依赖（node_modules 不入库，clone 后必跑）
-npm test                              # 全仓测试（当前 143 个）
+npm test                              # 全仓测试（当前 144 个）
 npm run test:stress --workspace @synapse/core # 单独运行 core 压力测试
 npm run typecheck                     # 全仓类型检查（core + 小程序壳 + Web）
 npm run sync:core                     # core → 小程序 vendor（增量覆盖 + 校验）
@@ -538,9 +573,11 @@ Web e2e 优先使用仓库内的 Chromium；若本地尚未安装，则使用 Pl
 
 **`apps/miniprogram/src/vendor/core/` 是生成物，不要手改** —— 改 `packages/core` 后跑 `npm run sync:core`。
 
-Web 端（`apps/web`）直接进程内复用 `@synapse/core`，浏览器用 `localStorage` 适配 KV、`fetch` 适配 HTTP、`crypto.randomUUID` 适配 ID。没配 DeepSeek Key 时同样走 `offlinePlanFallback` 本地规则模式。
+Web 端（`apps/web`）直接进程内复用 `@synapse/core`，浏览器用 **IndexedDB** 适配 KV（`CachedKvStore` 内存镜像 + 防抖写回）、`fetch` 适配 HTTP、`crypto.randomUUID` 适配 ID。没配 DeepSeek Key 时同样走 `offlinePlanFallback` 本地规则模式。
 
 PDF 抽取用 `pdfjs-dist`，由 `apps/web/scripts/copy-pdfjs-cmaps.mjs` 在 `predev` / `prebuild` 阶段把 CMap 表从 `node_modules` 复制到 `apps/web/public/pdfjs/cmaps`（该目录已 gitignore，属「npm install 可再生」产物）。**CMap 不放 CDN** 是刻意的：本项目的演示卖点之一就是断网可用。
+
+小程序端的 pdf.js 走另一个脚本：`apps/miniprogram/scripts/copy-pdfjs-vendor.mjs` 在 `pretypecheck` / `prebuild:weapp` 阶段把 `pdf.min.mjs` + `pdf.worker.min.mjs` 复制到 `src/packageDocuments/pdf/vendor/`（同样 gitignore）。**为什么要复制而不是直接 `import 'pdfjs-dist'`**：Taro 默认把所有 node_modules 打进主包 `vendors.js`，pdf.js 压缩后约 1.7MB，会直接顶爆微信 2MB 主包上限；放进分包源码目录后 webpack 把它算进分包，主包回落到约 0.8MB。分包里的这两份是压缩成品，已在 `config/index.ts` 的 `mini.compile.exclude` 里排除出 babel（1.7MB 的压缩代码会让 babel 直接报错）。
 
 ---
 
@@ -548,8 +585,8 @@ PDF 抽取用 `pdfjs-dist`，由 `apps/web/scripts/copy-pdfjs-cmaps.mjs` 在 `pr
 
 | 平台 | 状态 |
 | --- | --- |
-| 微信小程序（Taro） | 已交付主链路及资料结构化 / 批量导入 / 一键学习化 / Canvas 图谱（掌握度着色）/ 作业清单（逾期风险标）/ 复习苏格拉底提示 / 学情周报 / AI 依据展开 / 仪表盘 / 数据导出 / 三科完整闭环演示数据；「我的」页与 Web 同构；微信原生交互仍需真机验收，云开发 AI 仅自检 |
-| Web（Vite + React） | 已交付主链路及资料结构化 / 批量导入 / PDF 抽取 / 一键学习化 / SVG 图谱（掌握度着色）/ 作业清单（逾期风险标、作业包二维码）/ 复习苏格拉底提示 / 学情周报 / AI 依据展开 / 仪表盘 / JSON 导出 / 三科完整闭环演示数据，复用同一份 `@synapse/core`，34 条 e2e 通过 |
+| 微信小程序（Taro） | 已交付主链路及资料结构化 / 批量导入 / **PDF 抽取（资料库分包）** / 一键学习化 / Canvas 图谱（掌握度着色）/ 作业清单（逾期风险标）/ 复习苏格拉底提示 / 学情周报 / AI 依据展开 / 仪表盘 / 数据导出 / 对话流式等待与逐字渲染 / 三科完整闭环演示数据；「我的」页与 Web 同构；微信原生交互仍需真机验收，云开发 AI 仅自检 |
+| Web（Vite + React） | 已交付主链路及资料结构化 / 批量导入 / PDF 抽取 / 一键学习化 / SVG 图谱（掌握度着色、力导向动画、按学科分簇）/ 作业清单（逾期风险标、作业包二维码）/ 复习苏格拉底提示 / 学情周报 / AI 依据展开 / 仪表盘 / JSON 导出 / 对话流式等待与逐字渲染 / 三科完整闭环演示数据，复用同一份 `@synapse/core`，39 条 e2e 通过 |
 | 桌面（Tauri） | 待做 |
 | Android | 待做 |
 

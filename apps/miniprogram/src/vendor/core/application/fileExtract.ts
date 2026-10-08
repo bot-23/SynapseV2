@@ -25,6 +25,12 @@ export const MAX_EXTRACTED_CHARS = 200_000;
 /** 纯文本类后缀：内容即文本，走 core 内置解码，不需要壳注入解析器。 */
 const PLAIN_TEXT_SUFFIXES = new Set(["txt", "text", "md", "markdown", "mdx"]);
 
+/**
+ * 需要壳注入解析器的二进制格式。
+ * pdf 用 pdf.js；docx 是 zip 包，同样必须在壳侧解析（core 不引任何解析依赖）。
+ */
+const EXTRACTOR_SUFFIXES = new Set(["pdf", "docx"]);
+
 function decodeText(raw: Uint8Array): string {
   // Python: utf-8 / utf-8-sig / gbk / gb2312 依次尝试，最终 utf-8 ignore。
   // utf-8-sig 在 utf-8 失败时也必然失败（同编解码、仅多去 BOM），故实际链为 utf-8 → gbk → gb2312。
@@ -63,14 +69,14 @@ export async function extract_attachments(
       if (PLAIN_TEXT_SUFFIXES.has(suffix)) {
         extractedText = decodeText(raw);
         extractionStatus = "done";
-      } else if (suffix === "pdf") {
+      } else if (EXTRACTOR_SUFFIXES.has(suffix)) {
         if (!pdfExtractor) {
-          throw new Error("未注入 PDF 提取器（ports/FileExtractor）。");
+          throw new Error(`未注入 ${suffix.toUpperCase()} 提取器（ports/FileExtractor）。`);
         }
         extractedText = await pdfExtractor.extract(fileName, raw);
         extractionStatus = "done";
       } else {
-        extractionError = "当前仅支持提取 txt / md / pdf 文本。";
+        extractionError = "当前仅支持提取 txt / md / pdf / docx 文本。";
       }
     } catch (error) {
       extractionStatus = "error";

@@ -3,15 +3,19 @@
  * core 为 vendored 源码（npm run sync:core 同步自 packages/core），进程内直调，无 HTTP 服务器。
  */
 
+import Taro from '@tarojs/taro'
 import { createSynapseCore, type SynapseCore } from '../vendor/core'
 import type {
   ClarificationAnswer,
+  CopilotStreamEvent,
+  FrontendAttachment,
   StudyPilotRunRequest,
   StudyPilotRunResponse,
   StudyPlanRequest
 } from '../vendor/core'
 import { TaroKvStore } from '../adapters/kvStore'
 import { TaroHttpTransport } from '../adapters/httpTransport'
+import { pdfExtractor } from '../adapters/pdfExtractor'
 import { taroClock, taroIdGen } from '../adapters/system'
 
 let core: SynapseCore | null = null
@@ -23,6 +27,8 @@ export function getCore(): SynapseCore {
       http: new TaroHttpTransport(),
       clock: taroClock,
       idGen: taroIdGen,
+      // 资料库的 PDF 由壳注入 pdf.js（legacy + 主线程 fake worker）提取
+      fileExtractor: pdfExtractor,
       // 没配 Key 时直接走规则引擎出计划，而不是回一句固定话术
       config: { offlinePlanFallback: true }
     })
@@ -32,6 +38,30 @@ export function getCore(): SynapseCore {
 }
 
 export const DEFAULT_USER_ID = 'default'
+
+/** 当前生效的本地档案 ID 的存储键（壳层私有，不进入 core）。 */
+const KEY_ACTIVE_USER = 'synapse.activeUser'
+
+/** 读取当前生效的本地档案 ID；未设置时回落默认档案。 */
+export function getActiveUserId(): string {
+  try {
+    const value = String(Taro.getStorageSync(KEY_ACTIVE_USER) || '').trim()
+    return value || DEFAULT_USER_ID
+  } catch (error) {
+    console.error('[Synapse] 读取当前档案失败', error)
+    return DEFAULT_USER_ID
+  }
+}
+
+/** 切换当前生效的本地档案 ID（切数据桶，不是账号登录）。 */
+export function setActiveUserId(userId: string): void {
+  try {
+    const value = String(userId || '').trim() || DEFAULT_USER_ID
+    Taro.setStorageSync(KEY_ACTIVE_USER, value)
+  } catch (error) {
+    console.error('[Synapse] 写入当前档案失败', error)
+  }
+}
 
 /** 当前运行模式（deepseek = 已配置 Key；mock = 本地规则模式）。 */
 export function currentRuntimeMode(): { provider: string; model: string; isFallback: boolean } {
@@ -49,9 +79,10 @@ export function currentRuntimeMode(): { provider: string; model: string; isFallb
 export function buildRunPayload(
   text: string,
   conversationId: string,
-  planningMode: 'free' | 'blocks'
+  planningMode: 'free' | 'blocks',
+  files: FrontendAttachment[] = []
 ): StudyPilotRunRequest {
-  const profile = getCore().getProfile(DEFAULT_USER_ID).data as Record<string, unknown> | null
+  const profile = getCore().getProfile(getActiveUserId()).data as Record<string, unknown> | null
   const displayName = String(profile?.['display_name'] ?? '').trim()
   const grade = String(profile?.['grade'] ?? '').trim()
   const userProfile =
@@ -62,7 +93,8 @@ export function buildRunPayload(
   return {
     input: text,
     message: '',
-    files: [],
+    // 聊天附件：由壳先用 core 的 extractFiles 抽好文本，再随本轮请求带进去
+    files,
     userProfile,
     user_profile: null,
     planningMode,
@@ -78,6 +110,16 @@ export interface SavePlanResult {
   message: string
 }
 
+/**
+ * 流式入口：core 的 `runStream` 先产出若干条 stage（进度标签），
+ * 最后一条 done 携带与 `run` 完全一致的完整结果。
+ * 壳侧消费它就能把「正在整理你的需求…」这类等待反馈显示出来，
+ * 不用再干等一个 60 秒的静默请求。
+ */
+export function streamRun(payload: StudyPilotRunRequest): AsyncIterable<CopilotStreamEvent> {
+  return getCore().runStream(payload)
+}
+
 /** 计划自动生效：任何产出计划的响应都立即保存为「当前计划」，界面无需手动再点保存。 */
 export function autoSavePlan(
   response: StudyPilotRunResponse,
@@ -88,7 +130,7 @@ export function autoSavePlan(
   }
 
   const result = getCore().savePlan(
-    DEFAULT_USER_ID,
+    getActiveUserId(),
     {
       message: response.message,
       plan: response.plan ? { weekly_plan: response.plan.weekly_plan } : {},

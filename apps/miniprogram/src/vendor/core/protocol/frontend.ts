@@ -133,6 +133,15 @@ export function apiOk<T>(data: T, message = "ok"): ApiResponse<T> {
   return { success: true, message, data };
 }
 
+/**
+ * 失败响应统一出口：把可能夹带的 API Key 片段打码后再回显。
+ * 传输层若把整个请求（含 Authorization 头）塞进错误文本，密钥会顺着错误提示
+ * 回到界面 / 日志里 —— 在这里一次性掐掉，比在每个 catch 里各改一遍更可靠。
+ */
+export function redactSecrets(text: string): string {
+  return text.replace(/sk-[A-Za-z0-9_-]{4,}/g, "sk-***");
+}
+
 export function apiFail<T = never>(message: string): ApiResponse<T> {
-  return { success: false, message, data: null };
+  return { success: false, message: redactSecrets(message), data: null };
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getCore, DEFAULT_USER_ID } from '../services/synapse'
+import { getCore, getActiveUserId } from '../services/synapse'
+import { useFlash } from '../utils/useFlash'
 import {
   group_tasks_by_subject,
   plan_task_key,
@@ -55,21 +56,16 @@ export default function PlanView() {
   const [topicSubject, setTopicSubject] = useState('')
   const [topicName, setTopicName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState('')
+  const [notice, flash] = useFlash()
   /** G2：当前展开的复习卡提示面板 */
   const [hintPanel, setHintPanel] = useState<{ id: string; data: ReviewHintResult } | null>(null)
   const [hintRevealed, setHintRevealed] = useState(0)
   const [hintAnswerOpen, setHintAnswerOpen] = useState(false)
 
-  const flash = (message: string) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(''), 2600)
-  }
-
   const load = useCallback(() => {
     const core = getCore()
 
-    const result = core.getCurrentPlan(DEFAULT_USER_ID)
+    const result = core.getCurrentPlan(getActiveUserId())
     if (result.success) {
       const payload = (result.data ?? {}) as Record<string, unknown>
       const plan = (payload['plan'] ?? {}) as Record<string, unknown>
@@ -85,23 +81,23 @@ export default function PlanView() {
       setData(null)
     }
 
-    const versionResult = core.listPlanVersions(DEFAULT_USER_ID)
+    const versionResult = core.listPlanVersions(getActiveUserId())
     setVersions(
       ((versionResult.data as Record<string, unknown> | null)?.['versions'] ??
         []) as VersionView[],
     )
 
-    const todayResult = core.getTodayPlan(DEFAULT_USER_ID)
+    const todayResult = core.getTodayPlan(getActiveUserId())
     setToday(
       ((todayResult.data as Record<string, unknown> | null)?.['today'] ?? null) as TodayPlan,
     )
 
-    const longResult = core.getLongTermPlan(DEFAULT_USER_ID)
+    const longResult = core.getLongTermPlan(getActiveUserId())
     setLongPlan(
       ((longResult.data as Record<string, unknown> | null)?.['long_plan'] ?? null) as LongTermPlan,
     )
 
-    const reviewResult = core.listReviews(DEFAULT_USER_ID)
+    const reviewResult = core.listReviews(getActiveUserId())
     const reviewData = (reviewResult.data ?? {}) as Record<string, unknown>
     setReviews((reviewData['items'] ?? []) as ReviewItem[])
     setDueReviews((reviewData['due'] ?? []) as ReviewItem[])
@@ -162,7 +158,7 @@ export default function PlanView() {
     const taskKey = plan_task_key(day.day_index, task)
     const nextDone = !data.progress[taskKey]
     const result = getCore().updatePlanProgress({
-      user_id: DEFAULT_USER_ID,
+      user_id: getActiveUserId(),
       conversation_id: '',
       plan_id: '',
       plan_version: data.version,
@@ -186,7 +182,7 @@ export default function PlanView() {
   }
 
   const toggleToday = (key: string) => {
-    const result = getCore().toggleTodayItem(DEFAULT_USER_ID, key)
+    const result = getCore().toggleTodayItem(getActiveUserId(), key)
     if (!result.success) {
       flash(result.message || '更新失败')
       return
@@ -199,7 +195,7 @@ export default function PlanView() {
    * 走的还是 toggleTodayItem 这条既有打卡链路，只是把用时记成 5 分钟。
    */
   const startFive = (key: string) => {
-    const result = getCore().toggleTodayItem(DEFAULT_USER_ID, key, 5)
+    const result = getCore().toggleTodayItem(getActiveUserId(), key, 5)
     console.log('[Synapse] 先学 5 分钟', key, result.success)
     if (!result.success) {
       flash(result.message || '更新失败')
@@ -214,7 +210,7 @@ export default function PlanView() {
     if (!title) {
       return
     }
-    const result = getCore().addTodayItem(DEFAULT_USER_ID, { title })
+    const result = getCore().addTodayItem(getActiveUserId(), { title })
     console.log('[Synapse] 加入今日', title, result.success)
     if (result.success) {
       setNewItem('')
@@ -227,7 +223,7 @@ export default function PlanView() {
     if (!window.confirm(`把「${title}」从今天的清单里去掉？（短期计划不受影响）`)) {
       return
     }
-    const result = getCore().removeTodayItem(DEFAULT_USER_ID, key)
+    const result = getCore().removeTodayItem(getActiveUserId(), key)
     flash(result.message)
     load()
   }
@@ -240,7 +236,7 @@ export default function PlanView() {
     ) {
       return
     }
-    const result = getCore().restorePlanVersion(DEFAULT_USER_ID, version)
+    const result = getCore().restorePlanVersion(getActiveUserId(), version)
     console.log('[Synapse] 恢复计划版本', version, result.success)
     flash(result.message)
     load()
@@ -255,7 +251,7 @@ export default function PlanView() {
     }
     setBusy(true)
     try {
-      const result = await getCore().planForMilestone(DEFAULT_USER_ID, milestone.id)
+      const result = await getCore().planForMilestone(getActiveUserId(), milestone.id)
       console.log('[Synapse] 按阶段排本周', milestone.id, result.success)
       flash(result.message)
       load()
@@ -268,7 +264,7 @@ export default function PlanView() {
   }
 
   const completeMilestone = (milestone: Milestone) => {
-    const result = getCore().completeMilestone(DEFAULT_USER_ID, milestone.id)
+    const result = getCore().completeMilestone(getActiveUserId(), milestone.id)
     console.log('[Synapse] 完成阶段', milestone.id, result.success)
     flash(result.message)
     load()
@@ -281,7 +277,7 @@ export default function PlanView() {
     setBusy(true)
     try {
       const result = await getCore().buildLongTermPlan(
-        DEFAULT_USER_ID,
+        getActiveUserId(),
         longGoal.trim(),
         longDeadline.trim(),
       )
@@ -298,7 +294,7 @@ export default function PlanView() {
   }
 
   const gradeReview = (item: ReviewItem, grade: number) => {
-    const result = getCore().reviewItem(DEFAULT_USER_ID, item.id, grade)
+    const result = getCore().reviewItem(getActiveUserId(), item.id, grade)
     console.log('[Synapse] 复习评分', item.topic, grade, result.success)
     flash(result.message)
     // 评完分就收起提示面板，下一张卡从零开始
@@ -317,7 +313,7 @@ export default function PlanView() {
       setHintRevealed((current) => Math.min(hintPanel.data.hints.length, current + 1))
       return
     }
-    const result = await getCore().getReviewHints(DEFAULT_USER_ID, item.id)
+    const result = await getCore().getReviewHints(getActiveUserId(), item.id)
     console.log('[Synapse] 复习提示', item.id, result.success, result.message)
     if (!result.success) {
       flash(result.message || '提示获取失败')
@@ -333,7 +329,7 @@ export default function PlanView() {
     if (!topic) {
       return
     }
-    const result = getCore().addReviewTopic(DEFAULT_USER_ID, topicSubject.trim(), topic)
+    const result = getCore().addReviewTopic(getActiveUserId(), topicSubject.trim(), topic)
     console.log('[Synapse] 加入复习队列', topic, result.success)
     if (result.success) {
       setTopicName('')
@@ -346,7 +342,7 @@ export default function PlanView() {
     if (!window.confirm(`不再复习「${item.topic}」？`)) {
       return
     }
-    const result = getCore().removeReviewItem(DEFAULT_USER_ID, item.id)
+    const result = getCore().removeReviewItem(getActiveUserId(), item.id)
     flash(result.message)
     load()
   }

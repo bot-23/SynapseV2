@@ -25,7 +25,8 @@ export default function ClarificationCard({ clarification, submitting, onSubmit 
       questionId: q.id,
       answer: (answers[q.id] ?? '').trim()
     }))
-    console.log('[Synapse] 提交澄清答案', payload)
+    // 只记录答了几题，答案原文不落日志（隐私）
+    console.log('[Synapse] 提交澄清答案', payload.length)
     onSubmit(payload)
   }
 

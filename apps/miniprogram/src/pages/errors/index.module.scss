@@ -1,0 +1,261 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  padding: $spacing-md $page-padding 0;
+}
+
+.card {
+  background: $color-bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+}
+
+.cardTitle {
+  display: block;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.cardDesc {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-xs;
+}
+
+.searchInput {
+  width: 100%;
+  height: 80rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: 0 $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  box-sizing: border-box;
+  margin-top: $spacing-md;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-sm;
+}
+
+.inputHalf {
+  flex: 1;
+  min-width: 0;
+  height: 80rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: 0 $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  margin-right: $spacing-sm;
+
+  &:last-child {
+    margin-right: 0;
+  }
+}
+
+.textarea {
+  width: 100%;
+  min-height: 160rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  margin-top: $spacing-sm;
+}
+
+.primaryButton {
+  @include button-reset;
+  width: 100%;
+  height: $button-height-md;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  color: $color-text-white;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  margin-top: $spacing-md;
+  transition: all $transition-base;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.buttonDisabled {
+  opacity: 0.7;
+}
+
+/* 自测题面与选项 */
+.quizBox {
+  margin-top: $spacing-md;
+}
+
+.quizQuestion {
+  padding: $spacing-md 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-of-type {
+    border-bottom: none;
+  }
+}
+
+.quizStem {
+  display: block;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+  margin-bottom: $spacing-sm;
+}
+
+.quizOption {
+  padding: $spacing-sm $spacing-md;
+  margin-top: $spacing-xs;
+  background: $color-bg-page;
+  border: 1rpx solid transparent;
+  border-radius: $radius-md;
+  transition: all $transition-fast;
+}
+
+.quizOptionSelected {
+  background: rgba(19, 34, 57, 0.08);
+  border-color: $color-primary;
+}
+
+.quizOptionText {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.quizOptionTextSelected {
+  color: $color-primary;
+  font-weight: $font-weight-medium;
+}
+
+/* 判分结果 */
+.gradeBox {
+  margin-top: $spacing-md;
+  padding: $spacing-md;
+  background: rgba(19, 34, 57, 0.06);
+  border-radius: $radius-md;
+}
+
+.gradeScore {
+  display: block;
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-primary;
+}
+
+.gradeDetail {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  margin-top: 4rpx;
+}
+
+.gradeWrong {
+  margin-top: $spacing-sm;
+  padding: $spacing-sm;
+  background: $color-bg-card;
+  border-radius: $radius-sm;
+}
+
+.gradeWrongQ {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+}
+
+.gradeWrongA {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-success;
+  margin-top: 4rpx;
+}
+
+/* 错题本列表 */
+.emptyText {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-md;
+}
+
+.entry {
+  padding: $spacing-md 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-of-type {
+    border-bottom: none;
+  }
+}
+
+.entryHead {
+  display: flex;
+  align-items: center;
+}
+
+.entryTag {
+  flex-shrink: 0;
+  font-size: $font-size-xs;
+  color: $color-primary;
+  background: rgba(19, 34, 57, 0.12);
+  border-radius: $radius-xs;
+  padding: 2rpx 12rpx;
+}
+
+.entryTopic {
+  margin-left: $spacing-sm;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  @include text-ellipsis;
+}
+
+.entryQuestion {
+  display: block;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  line-height: $line-height-normal;
+  margin-top: $spacing-xs;
+}
+
+.entryAnswer {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  line-height: $line-height-normal;
+  margin-top: 4rpx;
+}
+
+.entryRemove {
+  align-self: flex-start;
+  margin-top: $spacing-sm;
+  padding: 4rpx $spacing-md;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.entryRemoveText {
+  font-size: $font-size-xs;
+  color: $color-error;
+}
+
+.bottomSpacer {
+  height: 120rpx;
+}

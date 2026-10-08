@@ -43,6 +43,11 @@ import { buildAssignmentPrompt } from "./prompts.js";
 /** 没配模型 Key 时的每日默认预算（分钟）。 */
 const DEFAULT_DAILY_MINUTES = 60;
 
+/** 单次从模型抽取的作业条数上限，防止一次返回把本地存储撑爆。 */
+const MAX_LLM_ITEMS = 60;
+/** 抽取出的文本字段长度上限。 */
+const LLM_FIELD_MAX = 200;
+
 export interface AssignmentIngestResult {
   items: AssignmentItem[];
   snapshot: AssignmentSnapshot;
@@ -382,7 +387,9 @@ export class AssignmentService {
     }>;
     unparsed: string;
   } {
-    const list = Array.isArray(raw["items"]) ? (raw["items"] as unknown[]) : [];
+    const list = Array.isArray(raw["items"])
+      ? (raw["items"] as unknown[]).slice(0, MAX_LLM_ITEMS)
+      : [];
     const items: Array<{
       subject: string;
       title: string;
@@ -397,20 +404,28 @@ export class AssignmentService {
         continue;
       }
       const row = entry as Record<string, unknown>;
-      const title = String(row["title"] ?? "").trim();
+      const title = String(row["title"] ?? "").trim().slice(0, LLM_FIELD_MAX);
       if (!title) {
         continue;
       }
-      const quantity = Math.max(0, Math.trunc(Number(row["quantity"] ?? 0)));
-      const unit = String(row["unit"] ?? "").trim();
-      const sourceText = String(row["source_text"] ?? "").trim() || title;
+      const quantity = Math.min(100_000, Math.max(0, Math.trunc(Number(row["quantity"] ?? 0))));
+      const unit = String(row["unit"] ?? "").trim().slice(0, LLM_FIELD_MAX);
+      const sourceText = (String(row["source_text"] ?? "").trim() || title).slice(
+        0,
+        LLM_FIELD_MAX,
+      );
       const rawDue = String(row["due_date"] ?? "").trim();
       const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDue)
         ? rawDue
         : parse_assignment_due(rawDue || sourceText, today) || "";
-      const minutes = Math.trunc(Number(row["estimated_minutes"] ?? 0));
+      const minutes = Math.min(
+        24 * 60 * 30,
+        Math.max(0, Math.trunc(Number(row["estimated_minutes"] ?? 0))),
+      );
       items.push({
-        subject: String(row["subject"] ?? "").trim() || detect_subject_from_text(`${title}${sourceText}`),
+        subject:
+          String(row["subject"] ?? "").trim().slice(0, LLM_FIELD_MAX) ||
+          detect_subject_from_text(`${title}${sourceText}`),
         title,
         quantity,
         unit,
@@ -419,7 +434,7 @@ export class AssignmentService {
         source_text: sourceText,
       });
     }
-    return { items, unparsed: String(raw["unparsed"] ?? "").trim() };
+    return { items, unparsed: String(raw["unparsed"] ?? "").trim().slice(0, 500) };
   }
 
   /** 把作业推进复习队列；同 subject::topic 已在队列里就不重复加。 */

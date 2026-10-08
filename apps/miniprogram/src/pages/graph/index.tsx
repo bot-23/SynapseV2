@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getCore } from '../../services/synapse'
+import { getCore, getActiveUserId } from '../../services/synapse'
 import styles from './index.module.scss'
 
 interface GraphNode {
@@ -82,7 +82,7 @@ export default function GraphPage() {
     setEdges((data['edges'] ?? []) as GraphEdge[])
     setSelectedId((current) => current || nextNodes[0]?.id || '')
 
-    const masteryData = (getCore().getKgMastery().data ?? {}) as Record<string, unknown>
+    const masteryData = (getCore().getKgMastery(getActiveUserId()).data ?? {}) as Record<string, unknown>
     const entries = (masteryData['entries'] ?? []) as MasteryEntry[]
     const byNode: Record<string, MasteryEntry> = {}
     for (const entry of entries) {

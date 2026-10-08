@@ -33,6 +33,9 @@ apps/web/playwright-report/
 # pdf.js 的 CMap 复制产物（由 apps/web/scripts/copy-pdfjs-cmaps.mjs 从 node_modules 生成）
 apps/web/public/pdfjs/
 
+# pdf.js 的分包 vendor 产物（由 apps/miniprogram/scripts/copy-pdfjs-vendor.mjs 生成）
+apps/miniprogram/src/packageDocuments/pdf/vendor/
+
 # 本地验收材料
 /trae-tasks.md
 /高三数学错题笔记.txt

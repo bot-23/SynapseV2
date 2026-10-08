@@ -6,10 +6,18 @@ export default defineAppConfig({
     'pages/mine/index',
     'pages/conversations/index',
     'pages/timetable/index',
-    'pages/documents/index',
     'pages/assignments/index',
     'pages/graph/index',
+    'pages/errors/index',
     'pages/cloudcheck/index'
+  ],
+  // 资料库页单独放进分包：它要带 pdf.js（约 1.7MB），留在主包会把 2MB 主包上限顶爆。
+  // 分包只在用户真的进资料库时才下载，主包因此保持在 1MB 以内。
+  subPackages: [
+    {
+      root: 'packageDocuments',
+      pages: ['index']
+    }
   ],
   window: {
     backgroundTextStyle: 'light',

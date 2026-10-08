@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { detect_document_subject } from '@synapse/core'
-import { getCore } from '../services/synapse'
+import { getCore, getActiveUserId } from '../services/synapse'
 import PageIntro from '../components/PageIntro'
-import { converge, initialPositions, type ForceAnchor, type Point } from './graphForce'
+import {
+  initialPositions,
+  type ForceAnchor,
+  type ForceLayoutRequest,
+  type ForceLayoutResponse,
+  type Point,
+} from './graphForce'
 
 interface GraphNode {
   id: string
@@ -124,8 +130,8 @@ function clusterLabelOf(members: GraphNode[]): string {
 
 export default function GraphView({ onBack }: GraphViewProps) {
   const [{ nodes, edges, masteryResult, masteryByNode }] = useState(() => {
-    const graph = (getCore().getKnowledgeGraph().data ?? {}) as Record<string, unknown>
-    const mastery = (getCore().getKgMastery().data ?? {}) as Record<string, unknown>
+    const graph = (getCore().getKnowledgeGraph(getActiveUserId()).data ?? {}) as Record<string, unknown>
+    const mastery = (getCore().getKgMastery(getActiveUserId()).data ?? {}) as Record<string, unknown>
     const entries = (mastery['entries'] ?? []) as MasteryEntry[]
     return {
       nodes: (graph['nodes'] ?? []) as GraphNode[],
@@ -227,51 +233,153 @@ export default function GraphView({ onBack }: GraphViewProps) {
       VIEW_HEIGHT,
     ),
   )
-
-  // 可见集合一变就重算目标位置，再从当前位置缓动过去。布局是一次算到底的
-  // 纯计算（几毫秒），所以"动"的只有这段缓动，速度完全可控、不会抽搐。
+  const positionsRef = useRef(positions)
   useEffect(() => {
+    positionsRef.current = positions
+  }, [positions])
+
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  /** 最后一帧画到 DOM 上的坐标：动画被打断时用它当起点，避免跳回旧位置 */
+  const paintedRef = useRef(new Map<string, Point>())
+  const workerRef = useRef<Worker | null>(null)
+  /** 在途的布局请求：reqId → resolve，worker 算完按 reqId 回填 */
+  const pendingLayouts = useRef(new Map<number, (result: Map<string, Point>) => void>())
+  const layoutReqId = useRef(0)
+
+  // 布局 worker 全生命周期只建一个：常驻比每次重算都新建省得多。
+  // 用 layout effect 是为了排在下面那个动画 effect 之前，保证它拿到 worker。
+  useLayoutEffect(() => {
+    const worker = new Worker(new URL('./graphForceWorker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (event: MessageEvent<ForceLayoutResponse>) => {
+      const { reqId, positions: result } = event.data
+      const resolve = pendingLayouts.current.get(reqId)
+      if (resolve) {
+        pendingLayouts.current.delete(reqId)
+        resolve(new Map(result))
+      }
+    }
+    worker.onerror = (event) => console.error('[Synapse] 图谱布局 worker 出错', event)
+    workerRef.current = worker
+    const pending = pendingLayouts.current
+    return () => {
+      worker.terminate()
+      workerRef.current = null
+      pending.clear()
+    }
+  }, [])
+
+  // 可见集合一变就让 worker 重算目标位置，拿到结果后再从当前位置缓动过去。
+  // 缓动完全走 DOM（节点 transform / 连线坐标），不进 React state——否则每帧
+  // 都要重渲染整个 SVG，节点一多就掉帧。布局是 O(n²)×数百步的纯计算，也一并
+  // 移到了 worker 里，主线程不再被占住。
+  useLayoutEffect(() => {
     if (!activeIds.length) {
       return
     }
+    const worker = workerRef.current
+    if (!worker) {
+      return
+    }
     const indexOf = new Map(activeIds.map((id, index) => [id, index]))
-    const target = converge(
-      activeIds,
-      edges
-        .filter((edge) => indexOf.has(edge.source_id) && indexOf.has(edge.target_id))
-        .map((edge) => [indexOf.get(edge.source_id)!, indexOf.get(edge.target_id)!] as const),
-      { width: VIEW_WIDTH, height: VIEW_HEIGHT, anchors },
-    )
-
-    const from = new Map<string, Point>()
-    for (const id of activeIds) {
-      from.set(id, positions.get(id) ?? target.get(id)!)
-    }
-
-    const startedAt = performance.now()
+    const links = edges
+      .filter((edge) => indexOf.has(edge.source_id) && indexOf.has(edge.target_id))
+      .map(
+        (edge) =>
+          [indexOf.get(edge.source_id)!, indexOf.get(edge.target_id)!] as [number, number],
+      )
+    const reqId = (layoutReqId.current += 1)
+    let cancelled = false
     let handle = 0
-    const tick = (now: number) => {
-      const progress = Math.min(1, Math.max(0, (now - startedAt) / SETTLE_MS))
-      // smoothstep：两头慢中间快，比线性更像"自然落位"
-      const eased = progress * progress * (3 - 2 * progress)
-      setPositions((previous) => {
-        const next = new Map(previous)
-        for (const [id, start] of from) {
-          const end = target.get(id)!
-          next.set(id, {
-            x: start.x + (end.x - start.x) * eased,
-            y: start.y + (end.y - start.y) * eased,
-          })
-        }
-        return next
-      })
-      if (progress < 1) {
-        handle = requestAnimationFrame(tick)
+
+    const paint = (fraction: number, start: Map<string, Point>, target: Map<string, Point>) => {
+      const svg = svgRef.current
+      if (!svg) {
+        return
       }
+      // 先算出这一帧每个节点的坐标，节点与连线共用，避免重复插值
+      const current = new Map<string, Point>()
+      svg.querySelectorAll<SVGGElement>('g[data-node-id]').forEach((element) => {
+        const id = element.dataset.nodeId!
+        const from = start.get(id) ?? target.get(id)!
+        const to = target.get(id) ?? from
+        const point = {
+          x: from.x + (to.x - from.x) * fraction,
+          y: from.y + (to.y - from.y) * fraction,
+        }
+        current.set(id, point)
+        element.setAttribute('transform', `translate(${point.x} ${point.y})`)
+      })
+      svg.querySelectorAll<SVGGElement>('g[data-edge-index]').forEach((element) => {
+        const edge = edges[Number(element.dataset.edgeIndex)]
+        if (!edge) {
+          return
+        }
+        const source = current.get(edge.source_id)
+        const goal = current.get(edge.target_id)
+        if (!source || !goal) {
+          return
+        }
+        const line = element.querySelector('line')
+        line?.setAttribute('x1', String(source.x))
+        line?.setAttribute('y1', String(source.y))
+        line?.setAttribute('x2', String(goal.x))
+        line?.setAttribute('y2', String(goal.y))
+        const label = element.querySelector('text')
+        label?.setAttribute('x', String((source.x + goal.x) / 2))
+        label?.setAttribute('y', String((source.y + goal.y) / 2 - 4))
+      })
+      paintedRef.current = current
     }
-    handle = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(handle)
-    // positions 只在开头读一次当起点，故意不进依赖
+
+    // 提交时 React 会用（可能已过期的）state 坐标重写 DOM。如果上一段动画是被打断的，
+    // 这里立刻把画面恢复到打断时的位置，免得先闪一帧旧布局再开始新动画。
+    if (paintedRef.current.size) {
+      paint(1, paintedRef.current, paintedRef.current)
+    }
+
+    new Promise<Map<string, Point>>((resolve) => {
+      pendingLayouts.current.set(reqId, resolve)
+      worker.postMessage({
+        reqId,
+        ids: activeIds,
+        links,
+        width: VIEW_WIDTH,
+        height: VIEW_HEIGHT,
+        anchors: Array.from(anchors.entries()),
+      } satisfies ForceLayoutRequest)
+    }).then((target) => {
+      if (cancelled) {
+        return
+      }
+      // 起点优先取当前画面上的位置：上一次动画被打断时，state 还停在更早的值
+      const start = paintedRef.current.size ? paintedRef.current : positionsRef.current
+      const startedAt = performance.now()
+      const tick = (now: number) => {
+        const progress = Math.min(1, Math.max(0, (now - startedAt) / SETTLE_MS))
+        // smoothstep：两头慢中间快，比线性更像"自然落位"
+        paint(progress * progress * (3 - 2 * progress), start, target)
+        if (progress < 1) {
+          handle = requestAnimationFrame(tick)
+          return
+        }
+        // 落位后把最终坐标写回 state，与刚画到 DOM 上的位置一致，不产生跳变
+        setPositions((previous) => {
+          const next = new Map(previous)
+          for (const [id, point] of target) {
+            next.set(id, point)
+          }
+          return next
+        })
+      }
+      handle = requestAnimationFrame(tick)
+    })
+
+    return () => {
+      cancelled = true
+      pendingLayouts.current.delete(reqId)
+      cancelAnimationFrame(handle)
+    }
+    // positions 只作为动画起点读取，故意不进依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIds, anchors, edges])
 
@@ -350,6 +458,7 @@ export default function GraphView({ onBack }: GraphViewProps) {
 
       <div className="graph-stage">
         <svg
+          ref={svgRef}
           viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
           role="img"
           aria-label="个人知识图谱"
@@ -367,6 +476,7 @@ export default function GraphView({ onBack }: GraphViewProps) {
             return (
               <g
                 key={`${edge.source_id}-${edge.target_id}-${edge.relation}-${index}`}
+                data-edge-index={index}
                 className={`graph-edge-group${shown ? '' : ' dim'}`}
               >
                 <line
@@ -401,6 +511,8 @@ export default function GraphView({ onBack }: GraphViewProps) {
             return (
               <g
                 key={node.id}
+                data-node-id={node.id}
+                transform={`translate(${point.x} ${point.y})`}
                 className={`graph-node${active ? ' active' : ''}${shown ? '' : ' dim'}`}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -410,21 +522,10 @@ export default function GraphView({ onBack }: GraphViewProps) {
                 tabIndex={0}
               >
                 {hub && (
-                  <circle
-                    cx={point.x}
-                    cy={point.y}
-                    r={radius + 6}
-                    fill="none"
-                    className="graph-node-halo"
-                  />
+                  <circle r={radius + 6} fill="none" className="graph-node-halo" />
                 )}
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r={radius}
-                  fill={MASTERY_COLORS[mastery?.level ?? 'untouched']}
-                />
-                <text x={point.x} y={point.y + radius + 14} textAnchor="middle">
+                <circle r={radius} fill={MASTERY_COLORS[mastery?.level ?? 'untouched']} />
+                <text y={radius + 14} textAnchor="middle">
                   {displayName(node.name)}
                 </text>
               </g>

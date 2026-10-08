@@ -1,4 +1,5 @@
 import { defineConfig, type UserConfigExport } from '@tarojs/cli';
+import path from 'node:path';
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin';
 import devConfig from './dev';
 import prodConfig from './prod';
@@ -34,6 +35,11 @@ export default defineConfig<'webpack5'>(async (merge, { command, mode }) => {
       enable: false, // Webpack 持久化缓存配置，建议开启。默认配置请参考：https://docs.taro.zone/docs/config-detail#cache
     },
     mini: {
+      compile: {
+        // 分包里的 pdf.js 构建产物本身已经是压缩好的成品（约 1.7MB）：
+        // 再交给 babel 解析会直接报错，转译也只会有副作用。见 scripts/copy-pdfjs-vendor.mjs
+        exclude: [path.resolve(__dirname, '..', 'src', 'packageDocuments', 'pdf', 'vendor')],
+      },
       postcss: {
         pxtransform: {
           enable: true,

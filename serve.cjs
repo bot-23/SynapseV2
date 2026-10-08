@@ -41,34 +41,45 @@ if (!fs.existsSync(indexPath)) {
 }
 
 const server = http.createServer((request, response) => {
-  const requestPath = decodeURIComponent((request.url || '/').split('?')[0])
-  let filePath = path.join(root, requestPath)
+  const rawPath = (request.url || '/').split('?')[0]
+  let requestPath = '/'
+  try {
+    // 非法百分号编码（如单个 '%'）会让 decodeURIComponent 抛错并打崩进程，这里必须兜住
+    requestPath = decodeURIComponent(rawPath)
+  } catch {
+    response.writeHead(400)
+    response.end('bad request')
+    return
+  }
+  const filePath = path.join(root, requestPath)
 
-  // 目录穿越保护：拼出来的路径必须仍在 dist 之内
-  if (!filePath.startsWith(root)) {
+  // 目录穿越保护：路径必须仍在 dist 之内。
+  // 只比较前缀会被同级目录绕过（dist-evil 也以 dist 开头），所以要求完全相等或带分隔符。
+  if (filePath !== root && !filePath.startsWith(root + path.sep)) {
     response.writeHead(403)
     response.end('forbidden')
     return
   }
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, 'index.html')
+  let resolved = filePath
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+    resolved = path.join(resolved, 'index.html')
   }
-  if (!fs.existsSync(filePath)) {
+  if (!fs.existsSync(resolved)) {
     // 前端路由回退：只有不带扩展名的路径才回退到 index.html，
     // 缺资源文件就如实报 404，免得浏览器拿到一份伪装成 JS 的 HTML
-    if (path.extname(filePath)) {
+    if (path.extname(resolved)) {
       response.writeHead(404)
       response.end('not found')
       return
     }
-    filePath = indexPath
+    resolved = indexPath
   }
 
   response.writeHead(200, {
-    'Content-Type': CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+    'Content-Type': CONTENT_TYPES[path.extname(resolved).toLowerCase()] || 'application/octet-stream',
     'Cache-Control': 'no-cache',
   })
-  fs.createReadStream(filePath).pipe(response)
+  fs.createReadStream(resolved).pipe(response)
 })
 
 server.listen(port, () => {

@@ -3,7 +3,7 @@ import { onboard } from './helpers'
 
 test('桌面导航采用深色主题并保留全部入口', async ({ page }) => {
   await onboard(page)
-  await expect(page.locator('.nav-item')).toHaveCount(6)
+  await expect(page.locator('.nav-item')).toHaveCount(7)
   expect(
     await page.locator('.sidebar').evaluate((element) => getComputedStyle(element).backgroundColor),
   ).toBe('rgb(19, 34, 57)')
@@ -17,14 +17,18 @@ test('「我的」页按「今日状态 → 学习资产 → 设置」分组，K
   await expect(page.locator('.mine-group-title')).toHaveText(['今日状态', '学习资产', '设置'])
   await expect(page.locator('.mine-card .card-title, .mine-card .card-title-inline')).toHaveText([
     '学习仪表盘',
+    '学习趋势',
     'AI 学情周报',
     '我的科目',
+    'AI 记忆',
     '我的课程表',
     '资料库',
     '知识图谱',
+    '本地档案',
     '学习画像',
     'AI 模型接入',
     '数据管理',
+    '到期提醒',
   ])
 
   // API Key 不再明晃晃摆着：默认只有状态说明，点「配置 Key」才出现输入框

@@ -16,13 +16,15 @@ async function openGraphWithDemoData(page: Page) {
 /**
  * 采样所有节点的圆心坐标（顺序与渲染顺序一致，可以按下标比对）。
  * 资料节点还带一圈 halo，用 :not 排掉，否则同一个圆心会被采两次。
+ * 圆心坐标现在挂在父级 <g> 的 transform 上（translate(x y)）。
  */
 function sampleNodes(page: Page) {
   return page.locator('.graph-node circle:not(.graph-node-halo)').evaluateAll((elements) =>
-    elements.map((element) => [
-      Number(element.getAttribute('cx')),
-      Number(element.getAttribute('cy')),
-    ] as [number, number]),
+    elements.map((element) => {
+      const transform = element.parentElement?.getAttribute('transform') ?? ''
+      const match = /translate\(([-\d.]+)\s+([-\d.]+)\)/.exec(transform)
+      return [Number(match?.[1] ?? NaN), Number(match?.[2] ?? NaN)] as [number, number]
+    }),
   )
 }
 

@@ -28,6 +28,24 @@ export interface ForceLayoutOptions {
   anchors: ReadonlyMap<string, ForceAnchor>
 }
 
+/**
+ * Worker 的消息契约：布局是一次算到底的纯计算，放到 worker 里跑才不会
+ * 卡住主线程。Map 不能结构化克隆，所以锚点用 [key, value] 数组传递。
+ */
+export interface ForceLayoutRequest {
+  reqId: number
+  ids: string[]
+  links: Array<[number, number]>
+  width: number
+  height: number
+  anchors: Array<[string, ForceAnchor]>
+}
+
+export interface ForceLayoutResponse {
+  reqId: number
+  positions: Array<[string, Point]>
+}
+
 const COOLING = 0.99
 const MIN_TEMPERATURE = 0.05
 const MAX_STEPS = 3000

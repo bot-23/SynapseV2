@@ -44,10 +44,10 @@ export function listConversationCards(): ConversationCard[] {
       try {
         const value = JSON.parse(window.localStorage.getItem(key) || '{}') as Partial<ConversationCard>
         cards.push({
-          id: value.id ?? key.slice(SESSION_PREFIX.length),
-          title: value.title ?? '新对话',
-          createdAt: value.createdAt ?? '',
-          updatedAt: value.updatedAt ?? '',
+          id: typeof value.id === 'string' && value.id ? value.id : key.slice(SESSION_PREFIX.length),
+          title: typeof value.title === 'string' && value.title ? value.title : '新对话',
+          createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+          updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
         })
       } catch {
         /* 跳过损坏条目 */
@@ -80,7 +80,17 @@ export function newConversationId(): string {
 function readCard(id: string): ConversationCard | null {
   try {
     const raw = window.localStorage.getItem(`${SESSION_PREFIX}${id}`)
-    return raw ? (JSON.parse(raw) as ConversationCard) : null
+    if (!raw) {
+      return null
+    }
+    // 本地存储可被同源脚本 / 扩展改写，字段类型必须逐项收口，否则非字符串标题会让 React 直接崩
+    const value = JSON.parse(raw) as Partial<ConversationCard>
+    return {
+      id: typeof value.id === 'string' && value.id ? value.id : id,
+      title: typeof value.title === 'string' && value.title ? value.title : '新对话',
+      createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+      updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+    }
   } catch {
     return null
   }

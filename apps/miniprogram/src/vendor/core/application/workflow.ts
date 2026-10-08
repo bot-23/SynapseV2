@@ -9,6 +9,11 @@ import {
   build_document_records,
   search_document_records,
 } from "../domain/documentRetrieval";
+import {
+  format_document_hits,
+  parse_rerank_json,
+  search_documents_ranked,
+} from "../domain/hybridRetrieval";
 import { build_plan_adjustment } from "../domain/planAdjuster";
 import { fit_tasks_to_minutes } from "../domain/planFit";
 import { add_days, days_between, to_date } from "../domain/dateMath";
@@ -71,6 +76,7 @@ import {
   buildMultiSubjectIntroPrompt,
   buildPlanPrompt,
   buildRememberRetryPrompt,
+  buildRerankPrompt,
   buildRulePlanMessagePrompt,
   buildTeachPrompt,
 } from "./prompts";
@@ -185,7 +191,7 @@ export class StudyPlanWorkflowService {
       status: "done",
       summary:
         "已完成混合检索，包含知识图谱、用户资料、历史偏好与执行记录。" +
-        ` 当前检索源：${String(this.providers.retrieval.describe()["provider"] ?? "unknown")}。`,
+        ` 当前检索源：${String(this.providers.retrieval.describe(payload.user_id)["provider"] ?? "unknown")}。`,
     });
 
     const orderingHint = this.providers.calendar.checkDeadline(payload.deadline);
@@ -233,8 +239,8 @@ export class StudyPlanWorkflowService {
     };
   }
 
-  get_graph_summary(): Record<string, unknown> {
-    return this.providers.retrieval.describe();
+  get_graph_summary(userId = "default"): Record<string, unknown> {
+    return this.providers.retrieval.describe(userId || "default");
   }
 
   /**
@@ -559,7 +565,7 @@ export class StudyPlanWorkflowService {
         const subject = String(params["subject"] ?? "");
         const action = String(params["action"] ?? "");
         const topic = String(params["topic"] ?? "");
-        const teachContext = this._retrieve_for_query(
+        const teachContext = await this._retrieve_for_query_reranked(
           [topic, subject, this._payload_input(payload)].filter(Boolean).join(" "),
           normalizedPayload,
         );
@@ -1171,7 +1177,7 @@ export class StudyPlanWorkflowService {
 
   private _build_hybrid_context(payload: StudyPlanRequest): string[] {
     const context: string[] = [];
-    context.push(...this.providers.retrieval.search(payload.learning_goal));
+    context.push(...this.providers.retrieval.search(payload.learning_goal, payload.user_id));
 
     const storedProfile = this.runtime_store.get_profile(payload.user_id);
     if (storedProfile["focus_preference"]) {
@@ -1219,7 +1225,17 @@ export class StudyPlanWorkflowService {
       : deduped.slice(0, 8);
   }
 
-  private _retrieve_for_query(query: string, payload: StudyPlanRequest, limit = 3): string[] {
+  /**
+   * 教学链路的检索：先多召回候选，再让模型重排到前 limit 条。
+   *
+   * 只在教学链路做重排 —— 计划生成是确定性的，不该为一次排序引入模型调用。
+   * 模型不可用或返回非法时**静默退回 BM25 顺序**：检索结果宁可不够准，也不能丢。
+   */
+  private async _retrieve_for_query_reranked(
+    query: string,
+    payload: StudyPlanRequest,
+    limit = 3,
+  ): Promise<string[]> {
     const trimmed = String(query ?? "").trim();
     if (!trimmed) {
       return [];
@@ -1228,7 +1244,28 @@ export class StudyPlanWorkflowService {
     if (!documents.length) {
       return [];
     }
-    return search_document_records(documents as never, trimmed, null, limit);
+    const candidates = search_documents_ranked(documents as never, trimmed, {
+      limit: Math.max(limit * 3, 6),
+      perDocument: 1,
+    });
+    if (candidates.length <= 1) {
+      return format_document_hits(candidates.slice(0, limit));
+    }
+    try {
+      const raw = await this.providers.llm.generateJson(
+        buildRerankPrompt(
+          trimmed,
+          candidates.map((candidate) => candidate.text),
+        ),
+      );
+      const order = parse_rerank_json(raw, candidates.length);
+      if (order.length) {
+        return format_document_hits(order.slice(0, limit).map((index) => candidates[index]!));
+      }
+    } catch {
+      // 重排失败：退回 BM25 顺序
+    }
+    return format_document_hits(candidates.slice(0, limit));
   }
 
   private _assess_plan_readiness(
@@ -2569,7 +2606,8 @@ export class StudyPlanWorkflowService {
       return [];
     }
     const milestones: Milestone[] = [];
-    for (const item of raw) {
+    // 阶段数上限与提示词一致（最多 6 段），模型多给就截断，避免超长计划写进存储
+    for (const item of (raw as unknown[]).slice(0, 6)) {
       if (!item || typeof item !== "object") {
         continue;
       }

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toDataURL } from 'qrcode'
-import { getCore, DEFAULT_USER_ID } from '../services/synapse'
+import { getCore, getActiveUserId } from '../services/synapse'
+import { useFlash } from '../utils/useFlash'
 import PageIntro from '../components/PageIntro'
 
 interface AssignmentItemView {
@@ -81,18 +82,13 @@ export default function AssignmentsView() {
   const [board, setBoard] = useState<BoardView | null>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState('')
   const [pack, setPack] = useState<PackView | null>(null)
   const [qr, setQr] = useState('')
   const [importCode, setImportCode] = useState('')
-
-  const flash = (message: string) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(''), 2600)
-  }
+  const [notice, flash] = useFlash()
 
   const load = () => {
-    const result = getCore().listAssignments(DEFAULT_USER_ID)
+    const result = getCore().listAssignments(getActiveUserId())
     setBoard((result.data as unknown as BoardView) ?? null)
   }
 
@@ -108,7 +104,7 @@ export default function AssignmentsView() {
     }
     setBusy(true)
     try {
-      const result = await getCore().createAssignments(DEFAULT_USER_ID, content)
+      const result = await getCore().createAssignments(getActiveUserId(), content)
       console.log('[Synapse] 添加作业', result.success, result.message)
       flash(result.message)
       if (result.success && Number((result.data ?? {})['added'] ?? 0) > 0) {
@@ -122,21 +118,21 @@ export default function AssignmentsView() {
 
   const toggle = (item: AssignmentItemView) => {
     const done = item.status !== 'done'
-    const result = getCore().completeAssignment(DEFAULT_USER_ID, item.id, done)
+    const result = getCore().completeAssignment(getActiveUserId(), item.id, done)
     console.log('[Synapse] 作业打卡', item.id, done, result.success)
     flash(result.message)
     load()
   }
 
   const reschedule = () => {
-    const result = getCore().rescheduleOverdueAssignments(DEFAULT_USER_ID)
+    const result = getCore().rescheduleOverdueAssignments(getActiveUserId())
     console.log('[Synapse] 逾期重排', result.success, result.message)
     flash(result.message)
     load()
   }
 
   const exportPack = async () => {
-    const result = getCore().exportAssignmentPack(DEFAULT_USER_ID)
+    const result = getCore().exportAssignmentPack(getActiveUserId())
     console.log('[Synapse] 生成作业包', result.success, result.message)
     flash(result.message)
     if (!result.success) {
@@ -170,7 +166,7 @@ export default function AssignmentsView() {
     if (!code) {
       return
     }
-    const result = getCore().importAssignmentPack(DEFAULT_USER_ID, code)
+    const result = getCore().importAssignmentPack(getActiveUserId(), code)
     console.log('[Synapse] 导入作业包', result.success, result.message)
     flash(result.message)
     if (result.success && Number((result.data ?? {})['imported'] ?? 0) > 0) {
@@ -180,23 +176,26 @@ export default function AssignmentsView() {
   }
 
   const today = todayString()
-  const items = board?.items ?? []
-  const groups = items.reduce<Array<{ date: string; items: AssignmentItemView[] }>>(
-    (accumulator, item) => {
-      const bucket = accumulator.find((group) => group.date === item.due_date)
+  const items = useMemo(() => board?.items ?? [], [board])
+  // 按截止日分桶 + 排序只在清单变化时重算：原来每渲染一次都 O(n²) 跑一遍
+  const groups = useMemo(() => {
+    const byDate = new Map<string, AssignmentItemView[]>()
+    for (const item of items) {
+      const bucket = byDate.get(item.due_date)
       if (bucket) {
-        bucket.items.push(item)
+        bucket.push(item)
       } else {
-        accumulator.push({ date: item.due_date, items: [item] })
+        byDate.set(item.due_date, [item])
       }
-      return accumulator
-    },
-    [],
-  )
-  groups.sort((a, b) => (a.date < b.date ? -1 : 1))
+    }
+    return Array.from(byDate, ([date, groupItems]) => ({ date, items: groupItems })).sort((a, b) =>
+      a.date < b.date ? -1 : 1,
+    )
+  }, [items])
 
   /** G4.1：core 已经算好「可能逾期」的 id，壳侧只负责显示，不在这里重算口径。 */
-  const isAtRisk = (id: string) => (board?.at_risk_ids ?? []).includes(id)
+  const atRiskIds = useMemo(() => new Set(board?.at_risk_ids ?? []), [board])
+  const isAtRisk = (id: string) => atRiskIds.has(id)
 
   return (
     <div className="docs-page">

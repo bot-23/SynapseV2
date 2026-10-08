@@ -1,19 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
-import { getCore, DEFAULT_USER_ID } from './services/synapse'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
+import { getCore, initCore, getActiveUserId } from './services/synapse'
 import { isOnboarded, markOnboarded, listConversationCards, getLastConversationId } from './utils/prefs'
 import Sidebar from './components/Sidebar'
 import ChatView from './pages/Chat'
-import PlanView from './pages/Plan'
-import MineView from './pages/Mine'
-import DocumentsView from './pages/Documents'
-import TimetableView from './pages/Timetable'
 import Onboarding from './pages/Onboarding'
-import GraphView from './pages/Graph'
-import AssignmentsView from './pages/Assignments'
 import type { ConversationCard } from './utils/prefs'
 
-type View = 'chat' | 'plan' | 'mine' | 'documents' | 'timetable' | 'graph' | 'assignments'
+// 首屏只需要「对话」与「引导页」，其余页面按需加载（各自成独立 chunk）。
+// 这样主包不必为了用户可能永远不打开的页面先付体积。
+const PlanView = lazy(() => import('./pages/Plan'))
+const MineView = lazy(() => import('./pages/Mine'))
+const DocumentsView = lazy(() => import('./pages/Documents'))
+const TimetableView = lazy(() => import('./pages/Timetable'))
+const GraphView = lazy(() => import('./pages/Graph'))
+const AssignmentsView = lazy(() => import('./pages/Assignments'))
+const ErrorsView = lazy(() => import('./pages/Errors'))
+
+type View = 'chat' | 'plan' | 'mine' | 'documents' | 'timetable' | 'graph' | 'assignments' | 'errors'
 
 const SIDEBAR_WIDTH_KEY = 'synapse.sidebarWidth'
 const SIDEBAR_WIDTH_DEFAULT = 252
@@ -39,11 +43,44 @@ export default function App() {
   const [profileName, setProfileName] = useState('')
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
   const resizing = useRef(false)
+  /** 拖拽过程中的宽度：期间只改 DOM，松手才写回 state */
+  const dragWidth = useRef(sidebarWidth)
+  const shellRef = useRef<HTMLDivElement>(null)
 
-  // 初始化核心：任何渲染前都先启动 core（浏览器 localStorage 适配器）
+  // 初始化核心：存储是异步后端（IndexedDB），必须等内存镜像装好再渲染，否则首屏读到空
   useEffect(() => {
-    getCore()
-    setReady(true)
+    let cancelled = false
+    void initCore()
+      .then(() => {
+        if (cancelled) return
+        setReady(true)
+        // F：到期复习提醒（Web Notification）。全程容错，任何异常都吞掉，绝不阻塞启动。
+        try {
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            const result = getCore().listReviews(getActiveUserId())
+            const data = (result.data ?? {}) as Record<string, unknown>
+            const dueCount = Number(data['due_count'] ?? 0)
+            const today = String(data['today'] ?? '')
+            if (dueCount > 0 && today) {
+              const key = `synapse.notified.${today}`
+              if (!localStorage.getItem(key)) {
+                new Notification(`今天有 ${dueCount} 个知识点到期复习`)
+                localStorage.setItem(key, '1')
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[Synapse] 到期提醒失败', error)
+        }
+      })
+      .catch((error) => {
+        // initCore 内部已有降级，这里只兜底：宁可进应用，也不要卡在启动页
+        console.error('[Synapse] core 初始化失败', error)
+        if (!cancelled) setReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const refreshConversations = useCallback(() => {
@@ -69,7 +106,7 @@ export default function App() {
     if (!ready || !onboarded) {
       return
     }
-    const profile = getCore().getProfile(DEFAULT_USER_ID).data as Record<string, unknown> | null
+    const profile = getCore().getProfile(getActiveUserId()).data as Record<string, unknown> | null
     setProfileName(String(profile?.['display_name'] ?? '').trim())
   }, [ready, onboarded, view])
 
@@ -77,17 +114,28 @@ export default function App() {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth))
   }, [sidebarWidth])
 
+  // 宽度统一从这里落到 DOM（而不是走 style prop）：拖拽期间直接改这个 CSS 变量，
+  // React 不参与，就不会被重渲染覆盖回旧值。
+  useLayoutEffect(() => {
+    shellRef.current?.style.setProperty('--sidebar-width', `${sidebarWidth}px`)
+  }, [sidebarWidth])
+
   // 拖拽用指针捕获实现：按下时接管指针，移动/松手都落在手柄自己身上，
   // 不用给 window 挂全局监听。拖拽期间给 body 加类，锁住光标与文本选择。
   const startResizing = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
     resizing.current = true
+    dragWidth.current = sidebarWidth
     document.body.classList.add('sidebar-resizing')
   }
 
+  // 拖动过程中只更新 DOM 上的 CSS 变量，不进 React state：
+  // 否则每个 pointermove 都会重渲染 App 及其当前子页，长会话/大列表时明显卡顿。
   const handleResizing = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (resizing.current) {
-      setSidebarWidth(clampSidebarWidth(event.clientX))
+      const width = clampSidebarWidth(event.clientX)
+      dragWidth.current = width
+      shellRef.current?.style.setProperty('--sidebar-width', `${width}px`)
     }
   }
 
@@ -100,6 +148,8 @@ export default function App() {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     document.body.classList.remove('sidebar-resizing')
+    // 松手时才把最终宽度同步回 state（也顺带触发持久化）
+    setSidebarWidth(dragWidth.current)
   }
 
   const handleOnboarded = () => {
@@ -109,7 +159,11 @@ export default function App() {
   }
 
   if (!ready) {
-    return null
+    return (
+      <div className="boot-splash">
+        <span>正在准备工作台…</span>
+      </div>
+    )
   }
 
   if (!onboarded) {
@@ -117,7 +171,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell" style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}>
+    <div className="app-shell" ref={shellRef}>
       <Sidebar
         view={view}
         profileName={profileName}
@@ -159,15 +213,18 @@ export default function App() {
         }}
       />
       <main className="app-main">
-        {view === 'chat' && (
-          <ChatView conversationId={conversationId} onChangeConversation={setConversationId} />
-        )}
-        {view === 'plan' && <PlanView />}
-        {view === 'mine' && <MineView onNavigate={(target) => setView(target)} />}
-        {view === 'graph' && <GraphView onBack={() => setView('mine')} />}
-        {view === 'documents' && <DocumentsView />}
-        {view === 'timetable' && <TimetableView />}
-        {view === 'assignments' && <AssignmentsView />}
+        <Suspense fallback={<div className="page-loading">正在加载…</div>}>
+          {view === 'chat' && (
+            <ChatView conversationId={conversationId} onChangeConversation={setConversationId} />
+          )}
+          {view === 'plan' && <PlanView />}
+          {view === 'mine' && <MineView onNavigate={(target) => setView(target)} />}
+          {view === 'graph' && <GraphView onBack={() => setView('mine')} />}
+          {view === 'documents' && <DocumentsView />}
+          {view === 'timetable' && <TimetableView />}
+          {view === 'assignments' && <AssignmentsView />}
+          {view === 'errors' && <ErrorsView />}
+        </Suspense>
       </main>
     </div>
   )

@@ -180,8 +180,9 @@ describe("压力测试：资料构图", () => {
       aliases: `节点${index}`,
       description: `第 ${index} 个压力测试节点`,
     }));
-    core.store.addKgNodes(nodes);
+    core.store.addKgNodes("default", nodes);
     core.store.addKgEdges(
+      "default",
       nodes.slice(1).map((node, index) => ({
         source_id: nodes[index]!.id,
         target_id: node.id,

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getCore, DEFAULT_USER_ID } from '../services/synapse'
+import { getCore, getActiveUserId } from '../services/synapse'
 
 interface OnboardingProps {
   onComplete: () => void
@@ -25,7 +25,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
     try {
       // 保存画像
-      getCore().saveProfile(DEFAULT_USER_ID, name.trim(), grade.trim())
+      getCore().saveProfile(getActiveUserId(), name.trim(), grade.trim())
 
       // 若填了 Key 则校验并保存；不填则直接进入本地规则模式
       const key = apiKey.trim()
@@ -58,7 +58,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <div className="profile-stars" aria-hidden="true" />
           <div className="profile-brand">
             <span className="profile-logo">
-              <img src="/icon.jpg" alt="" width="52" height="52" />
+              <img src="/icon.png" alt="" width="52" height="52" />
             </span>
             <span>Synapse</span>
           </div>
@@ -132,7 +132,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               type="button"
               className="secondary-button onboarding-skip"
               onClick={() => {
-                getCore().saveProfile(DEFAULT_USER_ID, name.trim() && grade.trim() ? name.trim() : '同学', grade.trim() || '未填写')
+                getCore().saveProfile(getActiveUserId(), name.trim() && grade.trim() ? name.trim() : '同学', grade.trim() || '未填写')
                 onComplete()
               }}
             >

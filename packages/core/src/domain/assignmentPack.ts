@@ -23,6 +23,13 @@ export const ASSIGNMENT_PACK_MAX_ITEMS = 60;
 /** 字段长度上限，防止有人把一整段话当标题塞进来把码撑爆。 */
 const FIELD_MAX_CHARS = 60;
 
+/** 数量 / 预估时长的上限：解码来自二维码，数值必须收口，不能只取下界。 */
+const QUANTITY_MAX = 100_000;
+const MINUTES_MAX = 24 * 60 * 30;
+
+/** 整段短码的最大字符数：先按长度截断，避免对超长输入先建完整行数组。 */
+const CODE_MAX_CHARS = 20_000;
+
 /** 一行拆出来的原始字段。 */
 export interface AssignmentPackDraft {
   due_date: string;
@@ -43,6 +50,15 @@ function sanitize_field(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, FIELD_MAX_CHARS);
+}
+
+/** 数值收口到 [min, max]；NaN / 无穷大一律取 min。 */
+function clampNumber(value: number, min: number, max: number): number {
+  const truncated = Math.trunc(value);
+  if (!Number.isFinite(truncated)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, truncated));
 }
 
 /** 打包：把作业条目编成短码。调用方负责先筛掉已完成的。 */
@@ -74,6 +90,7 @@ export function decode_assignment_pack(code: string): {
 } {
   const lines = String(code ?? "")
     .replace(/^\uFEFF/, "")
+    .slice(0, CODE_MAX_CHARS)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -98,11 +115,12 @@ export function decode_assignment_pack(code: string): {
     }
     drafts.push({
       due_date: dueDate,
-      subject: (parts[1] ?? "").trim(),
-      title,
-      quantity: Math.max(0, Math.trunc(Number(parts[3]) || 0)),
-      unit: (parts[4] ?? "").trim(),
-      estimated_minutes: Math.max(0, Math.trunc(Number(parts[5]) || 0)),
+      subject: sanitize_field(parts[1] ?? ""),
+      // 解码同样过一遍消毒：短码是外来数据，字段长度必须与打包侧一致地收口
+      title: sanitize_field(title),
+      quantity: clampNumber(Number(parts[3]), 0, QUANTITY_MAX),
+      unit: sanitize_field(parts[4] ?? ""),
+      estimated_minutes: clampNumber(Number(parts[5]), 0, MINUTES_MAX),
     });
   }
   return { recognized: true, drafts, invalid };

@@ -25,8 +25,9 @@ export interface LlmProvider {
 }
 
 export interface RetrievalProvider {
-  search(query: string): string[];
-  describe(): Record<string, unknown>;
+  /** userId 让图谱检索按档案隔离（多本地档案下互不串味）。 */
+  search(query: string, userId?: string): string[];
+  describe(userId?: string): Record<string, unknown>;
 }
 
 export interface CalendarProvider {

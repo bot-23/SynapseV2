@@ -466,6 +466,11 @@ function clean_title(fragment: string, subject: string): string {
   return title.trim() || "作业";
 }
 
+/** 粘贴解析的输入、条数与字段上限：超长文本不该把解析结果撑到失控。 */
+const ASSIGNMENT_INPUT_MAX_CHARS = 20_000;
+const ASSIGNMENT_MAX_ITEMS = 60;
+const ASSIGNMENT_FIELD_MAX_CHARS = 200;
+
 /**
  * 把一段话拆成若干作业草稿。
  *
@@ -475,6 +480,7 @@ function clean_title(fragment: string, subject: string): string {
  */
 export function parse_assignment_items(text: string, today: string): AssignmentDraft[] {
   const rawParts = String(text ?? "")
+    .slice(0, ASSIGNMENT_INPUT_MAX_CHARS)
     .split(/[，,；;。\n]+/)
     .map((part) => part.trim())
     .filter(Boolean);
@@ -493,7 +499,7 @@ export function parse_assignment_items(text: string, today: string): AssignmentD
   }
 
   const drafts: AssignmentDraft[] = [];
-  for (const fragment of merged) {
+  for (const fragment of merged.slice(0, ASSIGNMENT_MAX_ITEMS)) {
     const dueDate = parse_assignment_due(fragment, today);
     if (!dueDate) {
       continue;
@@ -507,7 +513,7 @@ export function parse_assignment_items(text: string, today: string): AssignmentD
       unit,
       due_date: dueDate,
       estimated_minutes: estimate_assignment_minutes(quantity, unit),
-      source_text: fragment,
+      source_text: fragment.slice(0, ASSIGNMENT_FIELD_MAX_CHARS),
     });
   }
   return drafts;

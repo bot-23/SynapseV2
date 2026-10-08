@@ -1,0 +1,4 @@
+# Rust 构建产物
+/src-tauri/target/
+# Tauri 生成的 schema / 中间产物
+/src-tauri/gen/

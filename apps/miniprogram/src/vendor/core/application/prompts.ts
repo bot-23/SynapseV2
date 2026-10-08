@@ -323,3 +323,75 @@ ${abilityLines}
 语气像同伴，具体到数字，不给空洞的鼓励；没有数据的维度就不要提。
 `.trim();
 }
+
+/**
+ * v2 测验出题：生成「可确定性判分」的选择题。
+ *
+ * 关键约束：必须给足选项与正确答案下标 —— 判分由 core 离线做，
+ * 模型返回的答案下标就是唯一判分依据，所以不允许出现「答案不在选项里」的情况。
+ */
+export function buildQuizPrompt(args: {
+  subject: string;
+  topic: string;
+  count: number;
+  context?: string[];
+}): string {
+  const materials = collect_document_hits(args.context ?? [])
+    .map((hit) => `- [${hit.file_name}] ${hit.excerpt}`)
+    .join("\n");
+  const materialBlock = materials
+    ? `\n优先依据以下用户自己的资料出题：\n${materials}\n`
+    : "";
+  return `
+你是一个出题节点。请只输出 JSON，不要输出 Markdown，不要展示推理过程。
+
+学科：${args.subject}
+知识点：${args.topic}
+出题数量：${args.count}
+${materialBlock}
+JSON 格式必须为：
+{
+  "questions": [
+    {
+      "stem": "题干",
+      "options": ["选项A", "选项B", "选项C", "选项D"],
+      "answer_index": 0
+    }
+  ]
+}
+
+约束：
+- 必须正好 ${args.count} 题。
+- 每题必须 4 个选项；answer_index 是正确选项在 options 里的下标（从 0 开始），必须落在 0..3 范围内。
+- 干扰项要似是而非（常见混淆点），不能一眼排除。
+- 每题只考一个点，不要出「以上都对」这类无效选项。
+`.trim();
+}
+
+/**
+ * 检索重排：让模型把候选片段按「与问题的相关度」排序。
+ *
+ * 只输出下标顺序，不改写内容 —— 重排是排序问题，一旦让模型「复述片段」，
+ * 就会出现它自己编的、资料里根本没有的内容。
+ */
+export function buildRerankPrompt(query: string, candidates: readonly string[]): string {
+  const list = candidates
+    .map((text, index) => `${index}. ${String(text).replace(/\s+/g, " ").slice(0, 160)}`)
+    .join("\n");
+  return `
+你是一个检索结果重排节点。下面是一批候选资料片段与用户的问题，请只输出 JSON，不要输出 Markdown。
+请按「对回答该问题的有用程度」从高到低排序，只输出下标数组，不要新增、删除或改写任何片段。
+
+问题：${query}
+
+候选片段：
+${list}
+
+JSON 格式必须为：
+{ "order": [最相关的下标, 次相关的下标, ...] }
+
+约束：
+- order 里的每个数字必须是上面出现过的下标，不能重复、不能越界。
+- 认为完全无关的片段可以不放进 order。
+`.trim();
+}

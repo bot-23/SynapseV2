@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { View, Text, Textarea, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import classnames from 'classnames'
-import { getCore, DEFAULT_USER_ID } from '../../services/synapse'
+import { getCore, getActiveUserId } from '../../services/synapse'
 import styles from './index.module.scss'
 
 interface AssignmentItemView {
@@ -78,7 +78,7 @@ export default function AssignmentsPage() {
   const [importCode, setImportCode] = useState('')
 
   const load = () => {
-    const result = getCore().listAssignments(DEFAULT_USER_ID)
+    const result = getCore().listAssignments(getActiveUserId())
     setBoard((result.data as unknown as BoardView) ?? null)
   }
 
@@ -93,7 +93,7 @@ export default function AssignmentsPage() {
     }
     setBusy(true)
     try {
-      const result = await getCore().createAssignments(DEFAULT_USER_ID, content)
+      const result = await getCore().createAssignments(getActiveUserId(), content)
       console.log('[Synapse] 添加作业', result.success, result.message)
       Taro.showToast({ title: result.message, icon: 'none' })
       if (result.success && Number((result.data ?? {})['added'] ?? 0) > 0) {
@@ -107,21 +107,21 @@ export default function AssignmentsPage() {
 
   const toggle = (item: AssignmentItemView) => {
     const done = item.status !== 'done'
-    const result = getCore().completeAssignment(DEFAULT_USER_ID, item.id, done)
+    const result = getCore().completeAssignment(getActiveUserId(), item.id, done)
     console.log('[Synapse] 作业打卡', item.id, done, result.success)
     Taro.showToast({ title: result.message, icon: 'none' })
     load()
   }
 
   const reschedule = () => {
-    const result = getCore().rescheduleOverdueAssignments(DEFAULT_USER_ID)
+    const result = getCore().rescheduleOverdueAssignments(getActiveUserId())
     console.log('[Synapse] 逾期重排', result.success, result.message)
     Taro.showToast({ title: result.message, icon: 'none' })
     load()
   }
 
   const exportPack = () => {
-    const result = getCore().exportAssignmentPack(DEFAULT_USER_ID)
+    const result = getCore().exportAssignmentPack(getActiveUserId())
     console.log('[Synapse] 生成作业包', result.success, result.message)
     Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
     if (result.success) {
@@ -144,7 +144,7 @@ export default function AssignmentsPage() {
       Taro.showToast({ title: '先扫码或粘贴短码', icon: 'none' })
       return
     }
-    const result = getCore().importAssignmentPack(DEFAULT_USER_ID, value)
+    const result = getCore().importAssignmentPack(getActiveUserId(), value)
     console.log('[Synapse] 导入作业包', result.success, result.message)
     Taro.showToast({ title: result.message, icon: 'none', duration: 3000 })
     if (result.success && Number((result.data ?? {})['imported'] ?? 0) > 0) {

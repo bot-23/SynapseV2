@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { getCore, DEFAULT_USER_ID } from '../services/synapse'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getCore, getActiveUserId } from '../services/synapse'
+import { useFlash } from '../utils/useFlash'
 import { browserIdGen } from '../adapters/system'
 import type { TimetableEntry } from '@synapse/core'
 import PageIntro from '../components/PageIntro'
@@ -31,15 +32,16 @@ export default function TimetableView() {
   const [dirty, setDirty] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [draft, setDraft] = useState(emptyDraft())
-  const [notice, setNotice] = useState('')
-
-  const flash = (message: string) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(''), 2600)
-  }
+  const [notice, flash] = useFlash()
+  // ICS 导入：解析结果先进入预览态，确认后才写入课表
+  const [icsText, setIcsText] = useState('')
+  const [icsPending, setIcsPending] = useState<TimetableEntry[]>([])
+  const [icsUnparsed, setIcsUnparsed] = useState<string[]>([])
+  const [icsWarnings, setIcsWarnings] = useState<string[]>([])
+  const icsInputRef = useRef<HTMLInputElement | null>(null)
 
   const load = () => {
-    const result = getCore().getTimetable(DEFAULT_USER_ID)
+    const result = getCore().getTimetable(getActiveUserId())
     const data = (result.data ?? {}) as Record<string, unknown>
     setEntries((data['entries'] ?? []) as TimetableEntry[])
     setDirty(false)
@@ -72,6 +74,55 @@ export default function TimetableView() {
     setDirty(true)
     setPasteText('')
     flash(`识别出 ${parsed.length} 节课，记得保存`)
+  }
+
+  /** ICS 解析：只解析进预览，不直接落库。 */
+  const parseIcs = (text: string) => {
+    const result = getCore().parseTimetableIcs(text)
+    const data = (result.data ?? {}) as Record<string, unknown>
+    const parsed = (data['entries'] ?? []) as TimetableEntry[]
+    const missed = (data['unparsedLines'] ?? []) as string[]
+    const warns = (data['warnings'] ?? []) as string[]
+    console.log('[Synapse] ICS 解析', parsed.length, missed.length)
+    setIcsPending(parsed)
+    setIcsUnparsed(missed)
+    setIcsWarnings(warns)
+    flash(result.message)
+  }
+
+  const pickIcsFile = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) {
+      return
+    }
+    try {
+      const text = await file.text()
+      setIcsText(text)
+      parseIcs(text)
+    } catch (error) {
+      console.error('[Synapse] 读取 ICS 失败', error)
+      flash('读取 ICS 文件失败')
+    }
+  }
+
+  const confirmIcsImport = () => {
+    if (!icsPending.length) {
+      flash('没有可导入的课程')
+      return
+    }
+    const merged = [...entries, ...icsPending]
+    const result = getCore().saveTimetable(getActiveUserId(), merged)
+    console.log('[Synapse] ICS 导入保存', result.success, result.message)
+    flash(result.message)
+    if (result.success) {
+      const data = (result.data ?? {}) as Record<string, unknown>
+      setEntries((data['entries'] ?? []) as TimetableEntry[])
+      setDirty(false)
+    }
+    setIcsPending([])
+    setIcsUnparsed([])
+    setIcsWarnings([])
+    setIcsText('')
   }
 
   const updateEntry = (id: string, patch: Partial<TimetableEntry>) => {
@@ -114,7 +165,7 @@ export default function TimetableView() {
   }
 
   const saveAll = () => {
-    const result = getCore().saveTimetable(DEFAULT_USER_ID, entries)
+    const result = getCore().saveTimetable(getActiveUserId(), entries)
     console.log('[Synapse] 保存课表', result.success, result.message)
     flash(result.message)
     if (result.success) {
@@ -124,14 +175,97 @@ export default function TimetableView() {
     }
   }
 
-  const sorted = [...entries].sort(
-    (a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute,
+  // 排序只在课表条目变化时做一次，别每次编辑/展开都重排
+  const sorted = useMemo(
+    () => [...entries].sort((a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute),
+    [entries],
   )
 
   return (
     <div className="docs-page">
       <div className="notice snackbar">{notice}</div>
       <PageIntro eyebrow="TIME WELL SPENT / 04" title="课程安排" description="先看清固定课程，再为自主学习腾出真正可用的时间。" />
+
+      <div className="mine-card">
+        <div className="card-title">导入 ICS 日历</div>
+        <div className="card-desc">
+          支持从教务系统或手机日历导出的 .ics 文件，也可以直接粘贴 ICS 文本。解析后先预览，确认无误再写入课表。
+        </div>
+        <label className="file-upload">
+          <input
+            ref={icsInputRef}
+            type="file"
+            accept=".ics,text/calendar"
+            className="file-input"
+            onChange={(event) => {
+              const files = event.target.files
+              void pickIcsFile(files)
+              event.target.value = ''
+            }}
+          />
+          <span className="file-upload-inner">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            选择 .ics 文件
+          </span>
+        </label>
+        <textarea
+          className="mine-textarea"
+          placeholder="或把 ICS 文本粘贴到这里…"
+          value={icsText}
+          onChange={(event) => setIcsText(event.target.value)}
+          rows={5}
+        />
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => {
+            if (!icsText.trim()) {
+              flash('先选择文件或粘贴 ICS 文本')
+              return
+            }
+            parseIcs(icsText)
+          }}
+        >
+          解析 ICS 文本
+        </button>
+
+        {icsPending.length > 0 && (
+          <div className="tt-warn-box">
+            <div className="tt-warn-title">已识别 {icsPending.length} 节课，确认后写入课表：</div>
+            {icsPending.slice(0, 20).map((entry, index) => (
+              <div key={entry.id || index} className="tt-warn-line">
+                · {weekdayLabel(entry.weekday)} {entry.name} {minuteToClock(entry.startMinute)}-
+                {minuteToClock(entry.endMinute)}
+              </div>
+            ))}
+          </div>
+        )}
+        {icsUnparsed.length > 0 && (
+          <div className="tt-warn-box">
+            <div className="tt-warn-title">以下内容没识别出来：</div>
+            {icsUnparsed.map((line, index) => (
+              <div key={index} className="tt-warn-line">
+                · {line}
+              </div>
+            ))}
+          </div>
+        )}
+        {icsWarnings.map((warning, index) => (
+          <div key={index} className="tt-warn-text">
+            {warning}
+          </div>
+        ))}
+        <button
+          type="button"
+          className={`primary-button${icsPending.length ? '' : ' muted'}`}
+          disabled={!icsPending.length}
+          onClick={confirmIcsImport}
+        >
+          {icsPending.length ? `确认导入（${icsPending.length} 节）` : '暂无可导入课程'}
+        </button>
+      </div>
 
       <div className="mine-card">
         <div className="card-title">从教务系统粘贴课表</div>

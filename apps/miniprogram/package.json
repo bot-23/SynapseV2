@@ -10,7 +10,9 @@
     "framework": "React"
   },
   "scripts": {
+    "pretypecheck": "node scripts/copy-pdfjs-vendor.mjs",
     "typecheck": "tsc --noEmit",
+    "prebuild:weapp": "node scripts/copy-pdfjs-vendor.mjs",
     "build:weapp": "taro build --type weapp",
     "build:swan": "taro build --type swan",
     "build:alipay": "taro build --type alipay",
@@ -55,7 +57,8 @@
     "react": "^18.0.0",
     "zustand": "^4.5.0",
     "classnames": "^2.5.0",
-    "dayjs": "^1.11.10"
+    "dayjs": "^1.11.10",
+    "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
     "miniprogram-ci": "^2.1.26",

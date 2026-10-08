@@ -60,8 +60,9 @@ function collectExports(file, seen = new Set()) {
     const source = matched[2];
     const clause = matched[1];
     for (const raw of clause.split(",")) {
-      const item = raw.trim();
-      if (!item || item.startsWith("type ")) {
+      // 支持 `export { type X }`：type 前缀要去掉后再计入，否则纯类型导出会被误判为不存在
+      const item = raw.trim().replace(/^type\s+/, "");
+      if (!item) {
         continue;
       }
       const alias = item.split(/\s+as\s+/);

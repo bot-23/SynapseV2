@@ -1,0 +1,21 @@
+[package]
+name = "synapse-desktop"
+version = "0.1.0"
+description = "Synapse 桌面端"
+edition = "2021"
+rust-version = "1.77"
+
+# 库名必须与 src/main.rs 里调用的 crate 名一致（下划线形式）
+[lib]
+name = "synapse_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 桌面端联网：WebView 直连模型商会受 CORS 限制，改由 Rust 侧发请求
+ureq = "2"

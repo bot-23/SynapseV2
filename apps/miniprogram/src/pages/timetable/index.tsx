@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { View, Text, Input, Textarea, Button, Picker } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import classnames from 'classnames'
-import { getCore, DEFAULT_USER_ID } from '../../services/synapse'
+import { getCore, getActiveUserId } from '../../services/synapse'
 import { taroIdGen } from '../../adapters/system'
+import { syncTimetableToPhoneCalendar } from '../../adapters/phoneCalendar'
 import type { TimetableEntry } from '../../vendor/core'
 import {
   WEEKDAY_OPTIONS,
@@ -34,9 +35,13 @@ export default function TimetablePage() {
   const [dirty, setDirty] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [draft, setDraft] = useState(emptyDraft())
+  const [syncing, setSyncing] = useState(false)
+  const [icsText, setIcsText] = useState('')
+  const [icsWarnings, setIcsWarnings] = useState<string[]>([])
+  const [importingIcs, setImportingIcs] = useState(false)
 
   const load = () => {
-    const result = getCore().getTimetable(DEFAULT_USER_ID)
+    const result = getCore().getTimetable(getActiveUserId())
     const data = (result.data ?? {}) as Record<string, unknown>
     setEntries((data['entries'] ?? []) as TimetableEntry[])
     setDirty(false)
@@ -68,6 +73,69 @@ export default function TimetablePage() {
     setDirty(true)
     setPasteText('')
     Taro.showToast({ title: `识别出 ${parsed.length} 节课，记得保存`, icon: 'none' })
+  }
+
+  /** E：解析 ICS 文本，确认后把条目并进课表（保存后才生效）。 */
+  const applyIcsText = async (text: string) => {
+    if (!text.trim()) {
+      Taro.showToast({ title: '先选择或粘贴 ICS 内容', icon: 'none' })
+      return
+    }
+    const result = getCore().parseTimetableIcs(text)
+    const data = (result.data ?? {}) as Record<string, unknown>
+    const parsed = (data['entries'] ?? []) as TimetableEntry[]
+    const warns = (data['warnings'] ?? []) as string[]
+    console.log('[Synapse] ICS 解析', parsed.length, warns.length)
+    setIcsWarnings(warns)
+    if (!result.success || !parsed.length) {
+      Taro.showToast({ title: result.message || '没能识别出课程', icon: 'none' })
+      return
+    }
+    const confirmed = await Taro.showModal({
+      title: '导入 ICS 课表',
+      content: `从日历里识别出 ${parsed.length} 节课，确认后会直接保存进课表。`,
+      confirmText: '导入并保存'
+    })
+    if (!confirmed.confirm) {
+      return
+    }
+    const saveResult = getCore().saveTimetable(getActiveUserId(), [...entries, ...parsed])
+    console.log('[Synapse] ICS 导入并保存', saveResult.success, saveResult.message)
+    Taro.showToast({ title: saveResult.message, icon: 'none', duration: 3000 })
+    if (saveResult.success) {
+      const saved = (saveResult.data ?? {}) as Record<string, unknown>
+      setEntries((saved['entries'] ?? []) as TimetableEntry[])
+      setDirty(false)
+      setIcsText('')
+    }
+  }
+
+  /** E：选一个 .ics 文件，读出文本后交给解析。 */
+  const pickIcsFile = async () => {
+    if (importingIcs) {
+      return
+    }
+    try {
+      const picked = await (Taro as any).chooseMessageFile({
+        count: 1,
+        type: 'file',
+        extension: ['ics']
+      })
+      const files = (picked.tempFiles ?? []) as Array<{ path: string; name: string }>
+      if (!files.length) {
+        return
+      }
+      setImportingIcs(true)
+      const file = files[0]!
+      const fs = Taro.getFileSystemManager()
+      const text = fs.readFileSync(file.path, 'utf-8') as unknown as string
+      await applyIcsText(String(text ?? ''))
+    } catch (error) {
+      console.error('[Synapse] 读取 ICS 文件失败', error)
+      Taro.showToast({ title: '读取 ICS 文件失败', icon: 'none' })
+    } finally {
+      setImportingIcs(false)
+    }
   }
 
   const updateEntry = (id: string, patch: Partial<TimetableEntry>) => {
@@ -110,7 +178,7 @@ export default function TimetablePage() {
   }
 
   const saveAll = () => {
-    const result = getCore().saveTimetable(DEFAULT_USER_ID, entries)
+    const result = getCore().saveTimetable(getActiveUserId(), entries)
     console.log('[Synapse] 保存课表', result.success, result.message)
     Taro.showToast({ title: result.message, icon: 'none' })
     if (result.success) {
@@ -123,6 +191,38 @@ export default function TimetablePage() {
   const sorted = [...entries].sort(
     (a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute
   )
+
+  /** 把课表写进系统日历：每节课一条「每周重复」事件，由微信逐条弹确认。 */
+  const syncCalendar = async () => {
+    if (syncing || dirty) {
+      if (dirty) {
+        Taro.showToast({ title: '先保存课表再同步', icon: 'none' })
+      }
+      return
+    }
+    const confirmed = await Taro.showModal({
+      title: '同步到系统日历',
+      content: `会把 ${entries.length} 节课写成每周重复的日历事件。微信会对每条事件各弹一次确认，请逐条允许。`,
+      confirmText: '开始同步'
+    })
+    if (!confirmed.confirm) {
+      return
+    }
+    setSyncing(true)
+    try {
+      const result = await syncTimetableToPhoneCalendar(entries)
+      console.log('[Synapse] 同步课表到日历', result.added, result.failed)
+      Taro.showToast({
+        title: result.failed
+          ? `写入 ${result.added} 条，${result.failed} 条未成功`
+          : `已写入 ${result.added} 条日历事件`,
+        icon: 'none',
+        duration: 2500
+      })
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <View className={styles.page}>
@@ -152,6 +252,35 @@ export default function TimetablePage() {
           </View>
         )}
         {warnings.map((warning, index) => (
+          <Text key={index} className={styles.warnText}>
+            {warning}
+          </Text>
+        ))}
+      </View>
+
+      <View className={styles.card}>
+        <Text className={styles.cardTitle}>导入 ICS 日历（.ics）</Text>
+        <Text className={styles.cardDesc}>
+          教务系统或手机日历导出的 .ics 文件可以直接导入：选文件或把文件内容粘贴进来，解析出「每周重复」的课程后确认加入。识别结果同样可以逐条校正。
+        </Text>
+        <Button
+          className={classnames(styles.ghostButton, importingIcs && styles.buttonMuted)}
+          disabled={importingIcs}
+          onClick={pickIcsFile}
+        >
+          {importingIcs ? '正在读取…' : '选择 .ics 文件'}
+        </Button>
+        <Textarea
+          className={styles.textarea}
+          placeholder="或把 .ics 文件内容粘贴到这里"
+          value={icsText}
+          maxlength={-1}
+          onInput={(event) => setIcsText(String(event.detail.value))}
+        />
+        <Button className={styles.primaryButton} onClick={() => applyIcsText(icsText)}>
+          解析粘贴的 ICS
+        </Button>
+        {icsWarnings.map((warning, index) => (
           <Text key={index} className={styles.warnText}>
             {warning}
           </Text>
@@ -316,6 +445,16 @@ export default function TimetablePage() {
         >
           {dirty ? '保存课表' : '课表已是最新'}
         </Button>
+
+        {entries.length > 0 && (
+          <Button
+            className={styles.ghostButton}
+            disabled={syncing}
+            onClick={syncCalendar}
+          >
+            {syncing ? '正在写入日历…' : '同步到系统日历'}
+          </Button>
+        )}
       </View>
 
       <Text className={styles.footNote}>

@@ -112,7 +112,7 @@ export class HintService {
     userId: string,
     card: ReviewItem,
   ): { answer: string; answer_source: string } {
-    const node = this.store.kgNodes().find((candidate) => {
+    const node = this.store.kgNodes(userId).find((candidate) => {
       if (review_key(candidate.subject, candidate.name) === card.key) {
         return true;
       }

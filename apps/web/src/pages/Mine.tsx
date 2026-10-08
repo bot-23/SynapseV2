@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { getCore, DEFAULT_USER_ID, currentRuntimeMode } from '../services/synapse'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getCore, getActiveUserId, setActiveUserId, currentRuntimeMode } from '../services/synapse'
+import { useFlash } from '../utils/useFlash'
 import PageIntro from '../components/PageIntro'
 
 type MineTarget = 'graph' | 'documents' | 'timetable'
@@ -36,6 +37,42 @@ interface WeeklyReportView {
   }
 }
 
+interface LocalUser {
+  user_id: string
+  display_name: string
+  updated_at: string
+}
+
+interface MemoryRow {
+  kind: string
+  label: string
+  value: string
+  updated_at: string
+}
+
+interface TrendPoint {
+  date: string
+  done_count: number
+  minutes: number
+}
+
+interface TrendSubject {
+  subject: string
+  points: Array<{ date: string; score: number }>
+  first_score: number
+  last_score: number
+  delta: number
+}
+
+interface TrendView {
+  days: number
+  from: string
+  to: string
+  daily: TrendPoint[]
+  subjects: TrendSubject[]
+  totals: { done_count: number; minutes: number; active_days: number; streak_days: number }
+}
+
 export default function MineView({ onNavigate }: MineViewProps) {
   const [profile, setProfile] = useState<Record<string, unknown>>({})
   const [name, setName] = useState('')
@@ -50,19 +87,27 @@ export default function MineView({ onNavigate }: MineViewProps) {
   const [subjects, setSubjects] = useState<Array<{ name: string; source: string }>>([])
   const [documentCount, setDocumentCount] = useState(0)
   const [dashboard, setDashboard] = useState<DashboardView | null>(null)
-  const [notice, setNotice] = useState('')
   const [loadingDemo, setLoadingDemo] = useState(false)
   const [report, setReport] = useState<WeeklyReportView | null>(null)
   const [generatingReport, setGeneratingReport] = useState(false)
-  const runtime = currentRuntimeMode()
-
-  const flash = (message: string) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(''), 2600)
-  }
+  const [users, setUsers] = useState<LocalUser[]>([])
+  const [memories, setMemories] = useState<MemoryRow[]>([])
+  const [confirmUserDelete, setConfirmUserDelete] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [trendDays, setTrendDays] = useState(7)
+  const [trend, setTrend] = useState<TrendView | null>(null)
+  const [notifyPermission, setNotifyPermission] = useState<string>(() =>
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+  )
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+  // 运行模式只跟「有没有配 Key」有关：缓存起来，别每次渲染都同步读一遍 core
+  const runtime = useMemo(() => currentRuntimeMode(), [deepseekConfigured])
+  // 档案列表每行都要判断是不是当前档案，这里算一次就够了
+  const activeUserId = getActiveUserId()
+  const [notice, flash] = useFlash()
 
   const load = () => {
-    const profileRes = getCore().getProfile(DEFAULT_USER_ID)
+    const profileRes = getCore().getProfile(getActiveUserId())
     const data = (profileRes.data ?? {}) as Record<string, unknown>
     setProfile(data)
     setName(String(data['display_name'] ?? ''))
@@ -74,27 +119,35 @@ export default function MineView({ onNavigate }: MineViewProps) {
       Boolean((statusRes.data as Record<string, unknown> | null)?.['deepseek_configured']),
     )
 
-    const kgRes = getCore().getGraphSummary()
+    const kgRes = getCore().getGraphSummary(getActiveUserId())
     setKgSummary((kgRes.data ?? {}) as Record<string, unknown>)
 
-    const timetableRes = getCore().getTimetable(DEFAULT_USER_ID)
+    const timetableRes = getCore().getTimetable(getActiveUserId())
     setTimetableCount(Number((timetableRes.data as Record<string, unknown> | null)?.['total'] ?? 0))
 
-    const subjectRes = getCore().listSubjects(DEFAULT_USER_ID)
+    const subjectRes = getCore().listSubjects(getActiveUserId())
     setSubjects(
       ((subjectRes.data as Record<string, unknown> | null)?.['subjects'] ??
         []) as Array<{ name: string; source: string }>,
     )
 
-    const docRes = getCore().listDocuments(DEFAULT_USER_ID)
+    const docRes = getCore().listDocuments(getActiveUserId())
     setDocumentCount(Number((docRes.data as Record<string, unknown> | null)?.['total'] ?? 0))
 
-    const dashboardRes = getCore().getDashboard(DEFAULT_USER_ID)
+    const dashboardRes = getCore().getDashboard(getActiveUserId())
     setDashboard((dashboardRes.data as unknown as DashboardView) ?? null)
 
-    const reportRes = getCore().listWeeklyReports(DEFAULT_USER_ID)
+    const reportRes = getCore().listWeeklyReports(getActiveUserId())
     setReport(
       ((reportRes.data as Record<string, unknown> | null)?.['latest'] ?? null) as WeeklyReportView | null,
+    )
+
+    const usersRes = getCore().listUsers()
+    setUsers(((usersRes.data as Record<string, unknown> | null)?.['users'] ?? []) as LocalUser[])
+
+    const memoryRes = getCore().listMemories(getActiveUserId())
+    setMemories(
+      ((memoryRes.data as Record<string, unknown> | null)?.['memories'] ?? []) as MemoryRow[],
     )
   }
 
@@ -103,8 +156,107 @@ export default function MineView({ onNavigate }: MineViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 学习趋势按天数窗口单独加载：切换 7/30/90 天时只重算这一块
+  useEffect(() => {
+    const res = getCore().getTrends(getActiveUserId(), trendDays)
+    setTrend((res.data as unknown as TrendView) ?? null)
+  }, [trendDays])
+
+  /** A3：切换本地档案。数据分桶在 core 里，切换后必须刷新才能让首屏读到新桶。 */
+  const switchUser = (id: string) => {
+    setActiveUserId(id)
+    window.location.reload()
+  }
+
+  const createProfile = () => {
+    const input = window.prompt('给这个本地档案起个名字')
+    if (input === null) {
+      return
+    }
+    const displayName = input.trim()
+    if (!displayName) {
+      flash('名字不能为空')
+      return
+    }
+    const userId = `u-${crypto.randomUUID()}`
+    const result = getCore().createUser(userId, displayName)
+    console.log('[Synapse] 新建档案', result.success, result.message)
+    flash(result.message)
+    load()
+  }
+
+  const removeUser = (id: string) => {
+    if (confirmUserDelete !== id) {
+      setConfirmUserDelete(id)
+      return
+    }
+    const result = getCore().deleteUser(id)
+    console.log('[Synapse] 删除档案', id, result.success)
+    setConfirmUserDelete('')
+    flash(result.message)
+    load()
+  }
+
+  /** B1：导入此前导出的 JSON。文件内容是 import_user_data 直接可吃的 payload。 */
+  const importJson = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) {
+      return
+    }
+    setImporting(true)
+    try {
+      const text = await file.text()
+      let payload: Record<string, unknown>
+      try {
+        payload = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        flash('不是合法的 JSON 文件')
+        return
+      }
+      const result = getCore().importData(getActiveUserId(), payload)
+      console.log('[Synapse] 数据导入', result.success, result.message)
+      if (result.success) {
+        window.alert(result.message)
+        window.location.reload()
+      } else {
+        flash(result.message)
+      }
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  /** B2：删除一条 AI 记忆。weak_points 传 value 只删该条，其余类型清空该字段。 */
+  const removeMemory = (memory: MemoryRow) => {
+    const result =
+      memory.kind === 'weak_points'
+        ? getCore().deleteMemory(getActiveUserId(), memory.kind, memory.value)
+        : getCore().deleteMemory(getActiveUserId(), memory.kind)
+    console.log('[Synapse] 删除记忆', memory.kind, result.success)
+    flash(result.message)
+    setMemories(
+      ((result.data as Record<string, unknown> | null)?.['memories'] ?? []) as MemoryRow[],
+    )
+  }
+
+  /** F：开启到期提醒（Web Notification）。 */
+  const enableNotify = async () => {
+    if (typeof Notification === 'undefined') {
+      flash('当前浏览器不支持到期提醒')
+      return
+    }
+    try {
+      const permission = await Notification.requestPermission()
+      setNotifyPermission(permission)
+      flash(permission === 'granted' ? '已开启到期提醒' : '未获得通知权限')
+    } catch (error) {
+      console.error('[Synapse] 申请通知权限失败', error)
+      flash('申请通知权限失败')
+    }
+  }
+
   const removeSubject = (subjectName: string) => {
-    const result = getCore().removeSubject(DEFAULT_USER_ID, subjectName)
+    const result = getCore().removeSubject(getActiveUserId(), subjectName)
     console.log('[Synapse] 移除科目', subjectName, result.success)
     flash(result.message)
     load()
@@ -112,7 +264,7 @@ export default function MineView({ onNavigate }: MineViewProps) {
 
   const saveProfile = () => {
     const result = getCore().saveProfile(
-      DEFAULT_USER_ID,
+      getActiveUserId(),
       name.trim() || null,
       grade.trim() || null,
     )
@@ -156,7 +308,7 @@ export default function MineView({ onNavigate }: MineViewProps) {
     if (!window.confirm('将删除画像、计划、进度、课程表与 API Key，且不可恢复。确定继续吗？')) {
       return
     }
-    const result = getCore().deleteAllUserData(DEFAULT_USER_ID)
+    const result = getCore().deleteAllUserData(getActiveUserId())
     console.log('[Synapse] 清空数据', result.success)
     flash(result.message)
     setFeedback('')
@@ -169,7 +321,7 @@ export default function MineView({ onNavigate }: MineViewProps) {
     }
     setLoadingDemo(true)
     try {
-      const result = await getCore().loadDemoData(DEFAULT_USER_ID)
+      const result = await getCore().loadDemoData(getActiveUserId())
       console.log('[Synapse] 载入演示数据', result.success, result.message)
       flash(result.message)
       load()
@@ -185,7 +337,7 @@ export default function MineView({ onNavigate }: MineViewProps) {
     }
     setGeneratingReport(true)
     try {
-      const result = await getCore().generateWeeklyReport(DEFAULT_USER_ID)
+      const result = await getCore().generateWeeklyReport(getActiveUserId())
       console.log('[Synapse] 生成周报', result.success, result.message)
       flash(result.message)
       load()
@@ -196,7 +348,7 @@ export default function MineView({ onNavigate }: MineViewProps) {
 
   /** F4.2：一键导出全部本地数据为 JSON 文件（数据主权归用户）。 */
   const exportJson = () => {
-    const result = getCore().exportData(DEFAULT_USER_ID)
+    const result = getCore().exportData(getActiveUserId())
     if (!result.success) {
       flash(result.message)
       return
@@ -219,6 +371,8 @@ export default function MineView({ onNavigate }: MineViewProps) {
   const nameLocked = Boolean(profile['display_name'])
   const nodeCount = Number(kgSummary['node_count'] ?? 0)
   const edgeCount = Number(kgSummary['edge_count'] ?? 0)
+  // 柱状图归一化基准：全 0 时用 1 兜底，避免除零把柱子画成 NaN 高
+  const trendMax = Math.max(1, ...(trend?.daily ?? []).map((point) => point.done_count))
   const demoEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO === 'true'
 
   return (
@@ -280,6 +434,85 @@ export default function MineView({ onNavigate }: MineViewProps) {
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="mine-card">
+        <div className="row-between">
+          <span className="card-title-inline">学习趋势</span>
+          <div className="trend-toggle">
+            {[7, 30, 90].map((days) => (
+              <button
+                key={days}
+                type="button"
+                className={`trend-toggle-btn${trendDays === days ? ' active' : ''}`}
+                onClick={() => setTrendDays(days)}
+              >
+                {days} 天
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="card-desc">
+          最近 {trend?.days ?? trendDays} 天的完成情况与各科目能力值走势，全部在本机计算。
+        </div>
+        {trend && trend.daily.length > 0 ? (
+          <>
+            <svg className="trend-chart" viewBox="0 0 320 110" role="img" aria-label="每日完成数柱状图">
+              <line x1="0" y1="100" x2="320" y2="100" className="trend-axis" />
+              {trend.daily.map((point, index) => {
+                const barWidth = 320 / trend.daily.length
+                const height = (point.done_count / trendMax) * 90
+                return (
+                  <rect
+                    key={point.date}
+                    x={index * barWidth + 1}
+                    y={100 - height}
+                    width={Math.max(1, barWidth - 2)}
+                    height={height}
+                    className="trend-bar"
+                  >
+                    <title>{`${point.date}：完成 ${point.done_count} 项`}</title>
+                  </rect>
+                )
+              })}
+            </svg>
+            <div className="report-stats">
+              <div className="report-stat">
+                <span className="report-value">{trend.totals.done_count}</span>
+                <span className="report-label">完成数</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{trend.totals.minutes}</span>
+                <span className="report-label">总用时(分)</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{trend.totals.active_days}</span>
+                <span className="report-label">活跃天数</span>
+              </div>
+              <div className="report-stat">
+                <span className="report-value">{trend.totals.streak_days}</span>
+                <span className="report-label">连续打卡</span>
+              </div>
+            </div>
+            {trend.subjects.length > 0 && (
+              <div className="trend-subjects">
+                {trend.subjects.map((subject) => (
+                  <div key={subject.subject} className="trend-subject-row">
+                    <span className="trend-subject-name">{subject.subject}</span>
+                    <span
+                      className={`trend-delta${subject.delta > 0 ? ' up' : subject.delta < 0 ? ' down' : ''}`}
+                    >
+                      {subject.delta > 0 ? `+${subject.delta}` : subject.delta}
+                    </span>
+                    <span className="trend-score">当前 {subject.last_score}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="feedback">这段时间还没有学习记录，先去「计划」页打几次卡。</div>
         )}
       </div>
 
@@ -368,6 +601,25 @@ export default function MineView({ onNavigate }: MineViewProps) {
         ))}
       </div>
 
+      <div className="mine-card">
+        <div className="card-title">AI 记忆</div>
+        <div className="card-desc">
+          这些是 AI 在对话里记住的关于你的内容（薄弱点、偏好、约束等）。记错了可以逐条删掉。
+        </div>
+        {memories.length === 0 && <div className="feedback">AI 还没记住什么</div>}
+        {memories.map((memory) => (
+          <div key={`${memory.kind}-${memory.value}`} className="memory-row">
+            <div className="memory-info">
+              <span className="memory-label">{memory.label}</span>
+              <span className="memory-value">{memory.value}</span>
+            </div>
+            <button type="button" className="subject-remove" onClick={() => removeMemory(memory)}>
+              删除
+            </button>
+          </div>
+        ))}
+      </div>
+
       <button type="button" className="mine-card mine-link-card" onClick={() => onNavigate('timetable')}>
         <div className="row-between">
           <span className="card-title-inline">我的课程表</span>
@@ -405,6 +657,47 @@ export default function MineView({ onNavigate }: MineViewProps) {
       </button>
 
       <p className="mine-group-title">设置</p>
+
+      <div className="mine-card">
+        <div className="card-title">本地档案</div>
+        <div className="card-desc">
+          每一份档案都是一个完全隔离的本地数据桶，切换后各自的学习记录互不影响。
+        </div>
+        {users.map((user) => {
+          const active = user.user_id === activeUserId
+          return (
+            <div key={user.user_id} className={`profile-row${active ? ' active' : ''}`}>
+              <div className="profile-info">
+                <span className="profile-name">{user.display_name || user.user_id}</span>
+                {active && <span className="profile-badge">当前</span>}
+              </div>
+              <div className="profile-actions">
+                {!active && (
+                  <button
+                    type="button"
+                    className="profile-switch"
+                    onClick={() => switchUser(user.user_id)}
+                  >
+                    切换
+                  </button>
+                )}
+                {user.user_id !== 'default' && (
+                  <button
+                    type="button"
+                    className="subject-remove"
+                    onClick={() => removeUser(user.user_id)}
+                  >
+                    {confirmUserDelete === user.user_id ? '确认删除' : '删除'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        <button type="button" className="secondary-button" onClick={createProfile}>
+          新建档案
+        </button>
+      </div>
 
       <div className="mine-card">
         <div className="card-title">学习画像</div>
@@ -486,6 +779,25 @@ export default function MineView({ onNavigate }: MineViewProps) {
         <button type="button" className="secondary-button" onClick={exportJson}>
           导出 JSON 数据
         </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="file-input"
+          onChange={(event) => {
+            const files = event.target.files
+            void importJson(files)
+            event.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={importing}
+          onClick={() => importInputRef.current?.click()}
+        >
+          {importing ? '正在导入…' : '导入 JSON 数据'}
+        </button>
         {demoEnabled && (
           <button
             type="button"
@@ -498,6 +810,27 @@ export default function MineView({ onNavigate }: MineViewProps) {
         )}
         <button type="button" className="danger-button" onClick={clearAll}>
           清空全部数据
+        </button>
+      </div>
+
+      <div className="mine-card">
+        <div className="card-title">到期提醒</div>
+        <div className="card-desc">
+          开启后，每天首次打开应用时，如果有到期的复习知识点会弹一条系统通知。通知内容只在本机生成。
+        </div>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={notifyPermission === 'unsupported' || notifyPermission === 'granted'}
+          onClick={enableNotify}
+        >
+          {notifyPermission === 'unsupported'
+            ? '当前浏览器不支持通知'
+            : notifyPermission === 'granted'
+              ? '已开启到期提醒'
+              : notifyPermission === 'denied'
+                ? '通知权限被拒绝，请在浏览器设置中开启'
+                : '开启到期提醒'}
         </button>
       </div>
     </div>

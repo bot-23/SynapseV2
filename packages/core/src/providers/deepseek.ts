@@ -37,6 +37,25 @@ function messageContent(content: unknown): string {
   return JSON.stringify(content);
 }
 
+/**
+ * 解析模型给的参数 JSON。
+ * 模型偶尔会返回 `null` / 数组 / 非法 JSON，这里统一兜成 `{}`，
+ * 避免把 `null` 当 `Record` 用或在主链路上抛未捕获异常。
+ */
+function parseArgs(raw: string | undefined): Record<string, unknown> {
+  if (!raw) {
+    return {};
+  }
+  try {
+    const value = JSON.parse(raw);
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 export class DeepSeekLlmProvider implements LlmProvider {
   private readonly modelName: string;
   private readonly temperature: number;
@@ -110,7 +129,7 @@ export class DeepSeekLlmProvider implements LlmProvider {
     if (message.tool_calls && message.tool_calls.length) {
       const toolCalls: ToolCall[] = message.tool_calls.map((tc) => ({
         name: tc.function?.name ?? "",
-        args: tc.function?.arguments ? JSON.parse(tc.function.arguments) : {},
+        args: parseArgs(tc.function?.arguments),
       }));
       return { tool_calls: toolCalls };
     }
@@ -149,7 +168,13 @@ export class DeepSeekLlmProvider implements LlmProvider {
       if (payload.trim() === "[DONE]") {
         return;
       }
-      const data = JSON.parse(payload) as ChatCompletion;
+      let data: ChatCompletion;
+      try {
+        data = JSON.parse(payload) as ChatCompletion;
+      } catch {
+        // 单个分片不是合法 JSON 时跳过，不让整条流崩掉
+        continue;
+      }
       const delta = data.choices?.[0]?.delta?.content;
       const text = messageContent(delta ?? "");
       if (text) {

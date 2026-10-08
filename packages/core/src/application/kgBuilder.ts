@@ -136,8 +136,8 @@ export class KgBuilder {
       }
     }
 
-    const addedNodes = this.store.addKgNodes([documentNode, ...topicNodes]);
-    const addedEdges = this.store.addKgEdges(edges);
+    const addedNodes = this.store.addKgNodes(userId, [documentNode, ...topicNodes]);
+    const addedEdges = this.store.addKgEdges(userId, edges);
     // F1：把生成的节点 ID 回写到资料上，形成「资料 → 图谱」的可查证据链。
     const generatedIds = [documentNode.id, ...topicNodes.map((node) => node.id)];
     const current = this.store
@@ -152,8 +152,8 @@ export class KgBuilder {
     return {
       doc_id: docId,
       file_name: documentNode.name,
-      node_count: this.store.kgNodes().length,
-      edge_count: this.store.kgEdges().length,
+      node_count: this.store.kgNodes(userId).length,
+      edge_count: this.store.kgEdges(userId).length,
       added_nodes: addedNodes,
       added_edges: addedEdges,
       topic_nodes: topicNodes,

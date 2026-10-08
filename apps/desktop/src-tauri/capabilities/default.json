@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Synapse 桌面端默认能力",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

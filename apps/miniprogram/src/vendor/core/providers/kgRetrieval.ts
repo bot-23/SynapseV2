@@ -35,9 +35,9 @@ const STOP_WORDS = new Set(["每天", "分钟", "同学", "计划", "模式", "�
 export class KgRetrievalProvider implements RetrievalProvider {
   constructor(private readonly store: RuntimeStore) {}
 
-  search(query: string): string[] {
-    const [nodeCount, edgeCount] = this.summaryCounts();
-    const ranked = this.rankNodes(query);
+  search(query: string, userId = "default"): string[] {
+    const [nodeCount, edgeCount] = this.summaryCounts(userId);
+    const ranked = this.rankNodes(query, userId);
     if (!ranked.length) {
       return [
         `图谱摘要：当前已有 ${nodeCount} 个节点、${edgeCount} 条边。`,
@@ -50,7 +50,7 @@ export class KgRetrievalProvider implements RetrievalProvider {
     const contextLines = [`图谱摘要：当前已有 ${nodeCount} 个节点、${edgeCount} 条边。`];
 
     for (const node of topMatches) {
-      const relationNames = this.collectNeighborNames(node.id);
+      const relationNames = this.collectNeighborNames(node.id, userId);
       const relationText = relationNames.length
         ? relationNames.slice(0, 4).join("、")
         : "暂无直接相邻节点";
@@ -60,7 +60,7 @@ export class KgRetrievalProvider implements RetrievalProvider {
     }
 
     const topIds = topMatches.map((node) => node.id);
-    const learningPath = this.buildLearningPath(topIds);
+    const learningPath = this.buildLearningPath(topIds, userId);
     if (learningPath.length) {
       contextLines.push(`图谱建议路径：${learningPath.join(" -> ")}。`);
     } else {
@@ -70,8 +70,8 @@ export class KgRetrievalProvider implements RetrievalProvider {
     return contextLines;
   }
 
-  describe(): Record<string, unknown> {
-    const [nodeCount, edgeCount] = this.summaryCounts();
+  describe(userId = "default"): Record<string, unknown> {
+    const [nodeCount, edgeCount] = this.summaryCounts(userId);
     return {
       provider: "sql-kg",
       status: "ready",
@@ -80,18 +80,18 @@ export class KgRetrievalProvider implements RetrievalProvider {
     };
   }
 
-  private summaryCounts(): [number, number] {
-    return [this.store.kgNodes().length, this.store.kgEdges().length];
+  private summaryCounts(userId: string): [number, number] {
+    return [this.store.kgNodes(userId).length, this.store.kgEdges(userId).length];
   }
 
-  private rankNodes(query: string): RankedNode[] {
+  private rankNodes(query: string, userId: string): RankedNode[] {
     let keywords = this.extractKeywords(query);
     const queryText = query.toLowerCase();
     if (!keywords.length) {
       keywords = queryText.trim() ? [queryText.trim()] : [];
     }
 
-    const nodes = this.store.kgNodes();
+    const nodes = this.store.kgNodes(userId);
     const ranked: RankedNode[] = [];
     for (const node of nodes) {
       const aliases = (node.aliases || "").split(",");
@@ -152,8 +152,8 @@ export class KgRetrievalProvider implements RetrievalProvider {
     return result;
   }
 
-  private collectNeighborNames(nodeId: string): string[] {
-    const edges = this.store.kgEdges();
+  private collectNeighborNames(nodeId: string, userId: string): string[] {
+    const edges = this.store.kgEdges(userId);
     const neighborIds = new Set<string>();
     for (const edge of edges) {
       if (edge.source_id === nodeId || edge.target_id === nodeId) {
@@ -169,7 +169,7 @@ export class KgRetrievalProvider implements RetrievalProvider {
       return [];
     }
     const nodesById = new Map<string, KnowledgeNode>(
-      this.store.kgNodes().map((node) => [node.id, node]),
+      this.store.kgNodes(userId).map((node) => [node.id, node]),
     );
     // 与旧库 SQLite 主键索引扫描序一致：按 id 字典序
     return [...neighborIds]
@@ -177,29 +177,29 @@ export class KgRetrievalProvider implements RetrievalProvider {
       .map((id) => nodesById.get(id)?.name ?? id);
   }
 
-  private buildLearningPath(nodeIds: string[]): string[] {
+  private buildLearningPath(nodeIds: string[], userId: string): string[] {
     if (nodeIds.length < 2) {
       return [];
     }
 
-    const path = this.findPath(nodeIds[0]!, nodeIds[1]!);
+    const path = this.findPath(nodeIds[0]!, nodeIds[1]!, 4, userId);
     if (!path) {
       return [];
     }
 
     const nodesById = new Map<string, KnowledgeNode>(
-      this.store.kgNodes().map((node) => [node.id, node]),
+      this.store.kgNodes(userId).map((node) => [node.id, node]),
     );
     return path.map((nid) => nodesById.get(nid)?.name ?? nid);
   }
 
-  private findPath(startId: string, endId: string, maxDepth = 4): string[] | null {
+  private findPath(startId: string, endId: string, maxDepth: number, userId: string): string[] | null {
     if (startId === endId) {
       return [startId];
     }
 
     const adjacency = new Map<string, string[]>();
-    for (const edge of this.store.kgEdges()) {
+    for (const edge of this.store.kgEdges(userId)) {
       if (!adjacency.has(edge.source_id)) {
         adjacency.set(edge.source_id, []);
       }
