@@ -5,7 +5,8 @@ on:
   pull_request:
 
 # 门禁的意义：把「改了 core 忘了同步 vendor」「类型回归」「两端构建挂掉」
-# 这类问题挡在合并前。此前这些问题全靠手动发现（已经踩过两次）。
+# 「改坏了 UI 交互」这类问题挡在合并前。此前这些问题全靠手动发现
+# （vendor 漂移与 e2e 失效都实际漏过去过）。
 
 jobs:
   verify:
@@ -46,6 +47,49 @@ jobs:
 
       - name: 构建小程序
         run: npm run build:weapp --workspace apps/miniprogram
+
+  e2e:
+    name: Web 端到端（Playwright）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # e2e 依赖 dev server（playwright.config 的 baseURL 指向 127.0.0.1:5180）。
+      # 起服务、等就绪、跑测试放在同一个 step 里：跨 step 的后台进程存活与否要看
+      # runner 行为，同一步最稳。dev 模式下 VITE_ENABLE_DEMO 生效，
+      # 「载入演示数据」按钮才在，依赖演示数据的用例才有得跑。
+      - name: Web 端到端测试
+        run: |
+          npm run dev --workspace apps/web > /tmp/vite.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:5180 > /dev/null && break
+            sleep 1
+          done
+          if ! curl -sf http://127.0.0.1:5180 > /dev/null; then
+            echo "::error::dev server 60 秒内没起来"
+            cat /tmp/vite.log
+            exit 1
+          fi
+          npm run e2e --workspace apps/web
+
+      - name: 失败时保留 trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: apps/web/e2e/results/
+          if-no-files-found: ignore
 
   desktop:
     name: 桌面端（Rust 编译检查）

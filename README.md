@@ -548,7 +548,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 | 类型检查 | `npm run typecheck` | 通过（core + 小程序壳 + Web） |
 | core 边界规则 | 含在 `npm test` | 通过 |
 | vendor 边界校验 | `npm run check:vendor` | 通过（对外名 263 个） |
-| CI 门禁 | `.github/workflows/ci.yml` | `verify`：typecheck → test → `sync:core` → vendor 无漂移（`git diff --exit-code`）→ 两端构建；`desktop`：`cargo check` |
+| CI 门禁 | `.github/workflows/ci.yml` | `verify`：typecheck → test → `sync:core` → vendor 无漂移（`git diff --exit-code`）→ 两端构建；`e2e`：起 dev server 跑 40 条 Playwright（失败保留 trace）；`desktop`：`cargo check` |
 
 ### 改行为时的约定
 
