@@ -5,11 +5,11 @@ test('品牌图标出现在标签页、引导页和侧栏', async ({ page, reque
   await page.goto('/')
   // 允许带 ?v=N 的缓存参数：换图标时靠它让浏览器重新拉
   const iconLink = page.locator('link[rel="icon"]')
-  await expect(iconLink).toHaveAttribute('href', /^\/icon\.jpg(\?v=\d+)?$/)
+  await expect(iconLink).toHaveAttribute('href', /^\/icon\.png(\?v=\d+)?$/)
 
   const icon = await request.get((await iconLink.getAttribute('href'))!)
   expect(icon.ok()).toBe(true)
-  expect(icon.headers()['content-type']).toContain('image/jpeg')
+  expect(icon.headers()['content-type']).toContain('image/png')
 
   const onboardingLogo = page.locator('.profile-logo img')
   await expect(onboardingLogo).toBeVisible()

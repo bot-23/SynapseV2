@@ -36,7 +36,7 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 
 ## 当前状态
 
-这是**已交付微信小程序与浏览器 Web 两个应用壳**的版本，核心学习规划链路、离线规则模式、本地资料检索、课程表避让、三层计划、复习闭环、**苏格拉底提示（三级递进、不给答案）**、**作业式计划（老师布置的任务 → 排进日程 → 盯着截止）**、**图谱掌握度热力（学情诊断图）**、**AI 学情周报（数字离线算、模型只写叙述）**以及**AI 依据展开（把资料原文、图谱路径、命中的规则摊开）**在两大平台均已落地。桌面和 Android 仍只有架构规划，没有对应应用壳。
+这是**已交付微信小程序、浏览器 Web 与桌面（Tauri）三个应用壳**的版本，核心学习规划链路、离线规则模式、本地资料检索、课程表避让、三层计划、复习闭环、**苏格拉底提示（三级递进、不给答案）**、**作业式计划（老师布置的任务 → 排进日程 → 盯着截止）**、**图谱掌握度热力（学情诊断图）**、**AI 学情周报（数字离线算、模型只写叙述）**以及**AI 依据展开（把资料原文、图谱路径、命中的规则摊开）**均已落地。桌面端目前只做到编译级验证（Rust 命令 + 前端适配器齐备，尚未出安装包）；Android 仍只有架构规划，没有对应应用壳。
 
 状态口径：
 
@@ -49,9 +49,9 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 
 最近一次验证结果：
 
-- core 单元测试、边界与压力测试：**161/161 通过**
+- core 单元测试、边界与压力测试：**203/203 通过**
 - core、小程序与 Web TypeScript 类型检查：通过
-- vendor 导入边界：通过（core 对外导出 203 个，检查 39 个壳文件）
+- vendor 导入边界：通过（core 对外导出 263 个，检查 41 个壳文件）
 - Web Playwright 端到端测试：**40/40 通过**（含品牌图标、页面导航、移动端宽度、知识图谱动画与分簇、对话流式等待、对话带附件）
 - Web 生产构建、微信小程序生产构建：通过
 - 微信小程序已上传体验版（1.0.2）
@@ -83,12 +83,16 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 | 阶段转短期计划 | ✅ | 可选择长期计划中的某个里程碑，重新生成本周计划 |
 | 复习队列 | ✅ | 完成学习任务自动入队；按 SM-2 安排到期复习，也可手动添加知识点 |
 | 苏格拉底提示 | ✅ | 复习卡先给「提示我」再给答案：三级递进（知识点方向 → 解题思路 → 关键步骤），三级用完才解锁「查看答案」；答案只从图谱节点说明或你自己的资料里取，取不到就直说没有；模型产出会过一道泄露守门员（与答案连续重合 6 字即判定泄露，换成本地提示并计数），没配 Key 或调用失败则整组降级为离线提示。提示按卡缓存在 `hint_texts`，离线与泄露替换的提示不入缓存 |
+| 错题本 | ✅ | 自测判错与手动录入的题都进错题本（科目 / 知识点 / 题干 / 你的答案 / 正确答案 / 来源）；支持关键词搜索、按科目查看、逐条删除，也可一键清空 |
+| 自测 | ✅ | 按「学科 + 知识点」出题（题目由模型生成、素材取自你本人的资料），交卷后由 core **离线确定性判分**，错题自动进错题本并排进复习队列 —— 补上「学 → 练 → 测 → 补」闭环的最后一段 |
+| 到期提醒 | ✅ | 进入应用时若有到期复习卡，用 Web Notification 提示一次（同一天只提醒一次，不重复打扰）；未授权或小程序端退化为页内提醒 |
 | 课程表 | ✅ | 粘贴文本解析（钟点或「第 N-M 节」，后者按默认作息表换算）、自动分列教室与教师、手动录入、逐条校正；计划按空闲时间压缩任务量 |
-| 资料库 | ✅ | 支持粘贴文本、多选 `.txt` / `.md` / `.pdf` 批量导入（逐个返回成功/失败，单个失败不阻塞其他）、超限明确提示、中文解码、切片与删除 |
+| 资料库 | ✅ | 支持粘贴文本、多选 `.txt` / `.md` / `.pdf` / `.docx` 批量导入（逐个返回成功/失败，单个失败不阻塞其他）、超限明确提示、中文解码、切片与删除 |
 | PDF 导入 | ✅ | 两端都支持。Web 注入 pdf.js 并把 CMap 放本地目录（中文 CID 不乱码、不依赖 CDN）；小程序把 pdf.js 放进**资料库分包**（主包只留几十行的转发插座），主包体积不受影响 |
+| docx 导入 | ✅ | **仅 Web 端**：由 mammoth 动态解析 `.docx` 纯文本（30MB 上限，与 PDF 同档）；小程序端暂不支持 docx |
 | 资料结构化元数据 | ✅ | 每份资料带科目（关键词表自动推断，可手改）、标签、来源（上传/粘贴）、字数、图谱节点数与复习卡数；旧数据读取侧补默认值，不需要迁移 |
 | 资料自动构图 | 🧪 | 每份资料可显式构建图谱；有 Key 时由模型抽取，无 Key/调用失败时降级为本地 bigram 高频词；构图后把节点 ID 回写到资料上 |
-| 图谱可视化 | ✅ | Web 使用 SVG、小程序使用 Canvas 环形布局；支持节点分类着色与点击查看说明 |
+| 图谱可视化 | ✅ | Web 使用 SVG 力导向布局（每份资料自成一颗星、按学科分簇、点节点只看一跳邻居），小程序使用 Canvas 环形布局；两端都支持点击节点查看说明与判定理由。着色口径见「图谱掌握度热力」 |
 | 图谱掌握度热力 | ✅ | 节点填充色按学情四档着色（绿=已掌握、黄=在学、红=薄弱、灰=未学），图例带各档节点数；判定全部来自复习卡的真实 SM-2 字段，点击节点显示判定理由（「连续记住 4 次，难度系数 2.8」/「已经忘记 3 次，是薄弱点」） |
 | 资料转复习 | 🧪 | 构图或一键学习化后，将新知识点去重加入次日 SM-2 复习队列，并把复习卡 ID 回写到资料上 |
 | 一键学习化 | ✅ | 资料库一个按钮串起「构建图谱 → 生成复习卡」，两步各自失败独立提示 |
@@ -97,16 +101,21 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 | 逾期风险预警 | ✅ | 还没逾期、但「剩余工作量 ÷（剩余天数 × 每日预算）> 0.8」的作业提前打黄色「可能逾期」标，与红色「已逾期」区分；阈值与口径都在 core 常量里，壳侧只显示不算 |
 | 作业包分享 | ✅ | 把未完成作业打包成一段可扫码的纯文本短码（首行带 `SYNAPSE-ASG/1` 签名）；Web 端生成二维码，小程序 `scanCode` 扫码或粘码导入；按「标题 + 截止日」去重，同一包反复导入、互相转发都不会长出重复条目 |
 | 学习仪表盘 | ✅ | 今日完成率、本周打卡天数、逾期作业数、今日待复习数、按科目的能力值（Lv + 进度条） |
+| 学习趋势 | ✅ | 最近 7 / 30 / 90 天可切换：完成度逐日曲线、各科目能力值走势与升降幅、连续打卡天数。与周报的区别是它看的是**随时间变化的曲线**，全部由 core 离线确定性聚合 |
 | AI 学情周报 | ✅ | 最近 7 天的完成率、各科目能力值变化、逾期作业、复习量、连续打卡全部由 core 离线确定性算出（模型一个数字都不许碰），再让模型写成一段不超过 200 字的「进步点 → 风险点 → 下周建议」；没配 Key 或调用失败则换成模板文案拼真实数字并标「离线模板」；`reports:{userId}` 只保留最近 8 期，新键同时进导出与清空清单 |
 | 数据导出 | ✅ | 一键导出全部本地 KV 数据为 JSON（Web 下载文件、小程序复制到剪贴板），导出内容不含 API Key |
+| 数据导入 | ✅ | 把导出的 JSON 读回来（换设备 / Web ↔ 小程序迁移）：资料与图谱整体覆盖，其余数据集合并；画像按字段合并但**跳过 `api_key`**（Key 不随文件迁移，需重新填写）；只识别已知数据集，其余键忽略 |
 | 演示数据 | 🧪 | 开发/体验环境一键载入三科闭环：三份资料（数学/英语/物理）、一周六节课的课程表、五天计划、五个已打卡任务、三张到期复习卡、三科知识图谱（知识点由演示资料自带，不走 bigram 降级）、作业清单（含 1 条逾期）与一期算好的学情周报 |
 | 本地检索 | ✅ | BM25 + 中文相邻双字索引；资料、画像、执行记录、课程表、知识图谱统一进入上下文预算 |
+| 全局搜索 | ✅ | 一处搜三样：资料（BM25 正文命中 + 文件名/科目/标签兜底）、错题本（子串匹配）、会话（标题命中，或消息正文命中并给出上下文片段）。全部离线可复现，不调模型；会话正文最多翻最近 200 条，避免历史会话无上限拖慢搜索 |
 | 资料证据 | ✅ | 命中资料后，计划消息、理由、首个任务和计划卡片显示资料名与来源摘要 |
 | 教学答疑检索 | ✅ | 教学问题命中资料时，将文件名和片段加入提示词；没有资料时保持旧提示词 |
 | AI 内容标识 | ✅ | AI 消息与计划卡片显示“AI 生成”；资料命中时显示“依据：你的资料《X》” |
 | AI 依据展开 | ✅ | 计划卡可摊开「AI 为什么这么安排」，分三块给出已经存在的证据：命中的确定性规则（每天总量上限、复习任务数、科目数、被覆盖的薄弱点、截止时间、避让的课时）、资料原文片段（文件名 + 摘录）、图谱学习路径 —— 只归集不生成，三类证据全部来自真实检索上下文与已生成的计划 |
 | 用户画像 | ✅ | 本地保存姓名、年级；姓名首次设定后锁定 |
+| 本地多档案 | ✅ | 可新建多个本地档案（各自一个数据桶）：画像、计划、资料、错题、图谱等完全隔离，一键切换；仍无账号体系与登录 |
 | 科目注册表 | ✅ | 对话识别出的科目跨会话保留，识别错误可在“我的”页删除 |
+| AI 记忆 | ✅ | 对话中识别到的薄弱点 / 偏好 / 约束会存成本地记忆并跨会话保留；记错了可在「我的 → 学习资产 → AI 记忆」逐条删除 |
 | 数据清理 | ✅ | 一键清空画像、计划、进度、课程表、资料与 API Key |
 | 知识图谱 | ✅ | 新装时为空，节点与边全部由个人资料增量构建，为计划提供相关节点和学习路径建议 |
 
@@ -117,11 +126,12 @@ npm run sync:core                         # 改过 packages/core 后同步到小
 | 首次引导 | `pages/onboarding/index` | 启动页 | Key 校验、跳过并使用本地规则模式 |
 | 对话 | `pages/chat/index` | Tab | 多轮对话、自由/积木模式、澄清卡片、计划卡片（可展开 AI 依据）、AI 标识 |
 | 计划 | `pages/plan/index` | Tab | 今日（含「先学 5 分钟」一键启动）、短期、长期、复习四个视图（复习卡带三级苏格拉底提示） |
-| 我的 | `pages/mine/index` | Tab | 按「今日状态 → 学习资产 → 设置」分三组：仪表盘、AI 学情周报、科目、课程表/资料库/作业/图谱入口、画像、AI 模型接入（Key 默认收起）、云开发 AI 自检、数据导出、演示数据与数据清理入口 |
+| 我的 | `pages/mine/index` | Tab | 按「今日状态 → 学习资产 → 设置」分三组：仪表盘、学习趋势、AI 学情周报、科目、AI 记忆、课程表/资料库/图谱入口、本地档案（多档案切换）、画像、AI 模型接入（Key 默认收起）、云开发 AI 自检、数据管理（导出 + 导入）、演示数据与数据清理入口 |
 | 历史会话 | `pages/conversations/index` | 二级页 | 新建、切换、长按删除会话 |
 | 课程表 | `pages/timetable/index` | 二级页 | 文本解析、手动录入、校正、保存 |
 | 资料库 | `packageDocuments/index` | 分包 | 粘贴或选择 TXT/MD/PDF（可多选）、查看元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除。pdf.js 与实现都在这个分包里，主包只留一个转发插座 |
 | 作业清单 | `pages/assignments/index` | 二级页 | 粘贴作业原话排期、按截止日分组、倒计时、打卡、黄色「可能逾期」预警、逾期重新排期、未来 7 天日程、生成作业包短码、扫一扫/粘码导入 |
+| 错题本 | `pages/errors/index` | 二级页 | 错题搜索、AI 自测出题与交卷判分、错题列表（科目/知识点/题干/答案）、手动录入、逐条删除与清空 |
 | 知识图谱 | `pages/graph/index` | 二级页 | 环形可视化节点与关系、按掌握度着色 + 四色图例、点击节点查看说明与判定理由 |
 | 云开发 AI 自检 | `pages/cloudcheck/index` | 实验页 | 探测 provider/model、思考模式、工具调用、JSON mode、流式输出 |
 
@@ -134,9 +144,10 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 | 首次引导 | `pages/Onboarding.tsx` | 填写姓名与年级，或跳过直接进入本地规则模式 |
 | 对话 | `pages/Chat.tsx` | 多轮会话、自由/积木模式、澄清卡片、计划卡片（可展开 AI 依据）、AI 标识 |
 | 计划 | `pages/Plan.tsx` | 今日（含「先学 5 分钟」一键启动）、短期、长期、复习四个视图（复习卡带三级苏格拉底提示） |
-| 我的 | `pages/Mine.tsx` | 按「今日状态 → 学习资产 → 设置」分三组：仪表盘、AI 学情周报、科目、课程表/资料库/图谱入口、画像、AI 模型接入（Key 默认收起）、数据导出、演示数据、清空数据 |
-| 资料库 | `pages/Documents.tsx` | 粘贴或批量选择 TXT/MD（2MB 上限）、元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除 |
+| 我的 | `pages/Mine.tsx` | 按「今日状态 → 学习资产 → 设置」分三组：仪表盘、学习趋势、AI 学情周报、科目、AI 记忆、课程表/资料库/图谱入口、本地档案（多档案切换）、画像、AI 模型接入（Key 默认收起）、数据管理（导出 + 导入）、到期提醒授权、演示数据、清空数据 |
+| 资料库 | `pages/Documents.tsx` | 粘贴或批量选择 TXT/MD/PDF/docx（文本 2MB、PDF 与 docx 30MB 上限）、资料搜索、元数据与切片摘要、一键学习化、编辑标题/科目/标签、构图谱、删除 |
 | 作业 | `pages/Assignments.tsx` | 粘贴作业原话排期、按截止日分组、倒计时、打卡、黄色「可能逾期」预警、逾期重新排期、未来 7 天日程、生成二维码作业包、粘码导入（另有小程序端 `scanCode` 扫码） |
+| 错题 | `pages/Errors.tsx` | 错题搜索、AI 自测出题与交卷判分（判分离线）、错题列表（科目/知识点/题干/答案）、手动录入、逐条删除与清空 |
 | 课程表 | `pages/Timetable.tsx` | 文本解析、手动录入、校正、保存 |
 | 知识图谱 | `pages/Graph.tsx` | 力导向收敛动画（布局算法在 `pages/graphForce.ts`）、按学科/资料分簇切换、点节点只看它的一跳邻居、按掌握度着色 + 四色图例、点击查看说明与判定理由 |
 
@@ -144,9 +155,10 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 
 | 能力 | 当前边界 |
 | --- | --- |
-| 资料格式 | 两端都开放 `.txt` / `.md`（含 `.markdown` / `.mdx`）/`.pdf`。core 通过 `ports/FileExtractor` 分发，PDF 提取器由壳注入 |
+| 资料格式 | Web 开放 `.txt` / `.md`（含 `.markdown` / `.mdx`）/ `.pdf` / `.docx`；小程序只开放 `.txt` / `.md` / `.pdf`（docx 暂不支持）。core 通过 `ports/FileExtractor` 分发，PDF 与 docx 的解析器都由壳注入 |
 | PDF 抽取 | 两端都由 pdf.js 逐页取 textContent；扫描件（图片版 PDF）**没有文字层，抽不出内容**，会给出「可能是扫描件，当前不支持 OCR」的明确提示而不是静默空结果。小程序端不带 CMap：字体自带 ToUnicode 的中文 PDF 正常，依赖预定义 CJK CMap 的老式 PDF 可能缺字 |
-| PDF 体量 | 文本类文件上限 2MB，PDF 上限 30MB；抽取文字仍受 core 的 20 万字索引上限约束，超出即停止翻页 |
+| docx 抽取 | 仅 Web 端，由 mammoth 取纯文本（不保留样式、图片与批注）。小程序端暂不支持 |
+| 文件体量 | 文本类文件上限 2MB，PDF 与 docx 上限 30MB；抽取文字仍受 core 的 20 万字索引上限约束，超出即停止翻页 |
 | 小程序包体积 | pdf.js（约 1.7MB）放在资料库分包里，主包约 0.8MB；进资料库页时才会下载该分包 |
 | 中文编码 | TXT 按 UTF-8 → GBK → GB2312 尝试；最终退回 UTF-8 宽松解码 |
 | 资料长度 | 单文件界面限制 2MB；core 单份资料最多索引 20 万字（超出部分不参与检索，不再静默截断到 6000 字） |
@@ -166,7 +178,7 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 | 云开发 AI | 只有能力自检页，尚未成为正式 `LlmProvider`，不会替代 DeepSeek 主链路 |
 | 流式输出 | core 的 `runStream` 会先产出若干条 stage 进度、最后一条 done 带完整结果；两端对话都已消费它（进度气泡 + 逐字渲染）。**token 级流式还没有**：`streamText` 接口在 provider 里已就绪但工作流未接，需要扩 core 协议 |
 | 数据容量 | Web 端已迁到 **IndexedDB**（`synapse` 库，上限通常数百 MB 起）；小程序仍受 `Taro.storage` 约 10MB 限制。尚无自动归档、跨设备同步或云端备份 |
-| 平台范围 | 目前交付的是 Taro 微信小程序；支付宝/抖音依赖已存在，但未做完整平台验收 |
+| 平台范围 | 已交付微信小程序、Web 与桌面（Tauri）三个壳；支付宝/抖音依赖已存在，但未做完整平台验收 |
 
 ---
 
@@ -176,17 +188,17 @@ Web 壳是单页应用，用视图状态切换而非路由表；左侧栏提供�
 
 | 能力 | 状态 | 缺口 |
 | --- | --- | --- |
-| 聊天附件 | ✅ | 对话页可带 1–3 份资料（txt / md / pdf）一起发送：壳先用 core 的 `extractFiles` 抽出文本，随本轮请求带进 core，自动落库为资料并把摘要写进本轮偏好。小程序端 PDF 需先进入过资料库（pdf.js 在分包内） |
-| 图片/OCR/Word/Markdown | ⏳ | 没有解析器与 UI 入口（`.md` 作为纯文本已支持） |
+| 聊天附件 | ✅ | 对话页可带 1–3 份资料（txt / md / pdf，Web 端另支持 docx）一起发送：壳先用 core 的 `extractFiles` 抽出文本，随本轮请求带进 core，自动落库为资料并把摘要写进本轮偏好。小程序端 PDF 需先进入过资料库（pdf.js 在分包内） |
+| 图片 / OCR | ⏳ | 没有解析器与 UI 入口（Word `.docx` 已在 Web 端支持，见「docx 导入」；`.md` 作为纯文本已支持） |
 | 聊天流式打字机 | 🧩 | stage 进度与逐字渲染已交付；**token 级流式**还缺（core 的 `streamText` 未被工作流消费，需要扩 SSE 协议） |
-| 推送提醒 | 🧩 | `NotifierProvider` 当前是 mock，没有订阅消息或系统通知实现；作业逾期只做清单标红 |
+| 推送提醒 | 🧩 | 「到期复习」已做轻量提醒（Web Notification / 小程序页内 toast，同一天只提醒一次）；`NotifierProvider` 仍是 mock，没有微信订阅消息或系统级推送，作业逾期也只做清单标红 |
 | 真实日历同步 | ✅ | 小程序课表页「同步到系统日历」把每节课写成系统日历的**每周重复事件**（`wx.addPhoneRepeatCalendar`，含提前 15 分钟提醒；周次「1-16」换算成重复周数）。`CalendarProvider` 仍只做截止日期提示；**反向读取（把系统日历/课程平台导入进来）还没有** |
 | 云开发 AI 正式接入 | 🧪 | 自检页只验证能力；尚未实现 Provider、配置切换与回归测试 |
-| 用户账号与登录 | ⏳ | 当前固定本地用户 `default`，没有微信登录、账号体系或多用户切换 |
-| 跨设备同步/云备份 | ⏳ | 全部业务数据仅在当前设备 KV 中；已有导出，但没有导入恢复入口 |
-| 数据导入/恢复 | ⏳ | 已支持 JSON 导出；没有把导出文件读回来的「恢复」入口 |
+| 用户账号与登录 | ⏳ | 已支持**本地多档案**（各自一个数据桶，可切换），但仍是设备内数据隔离；没有微信登录、账号体系与跨设备身份 |
+| 跨设备同步/云备份 | ⏳ | 全部业务数据仅在当前设备 KV 中；已有导出 + 导入，但没有自动同步或云端备份 |
+| 数据导入/恢复 | ✅ | 把导出的 JSON 读回来（Web 选文件、小程序粘码/读剪贴板）：资料与图谱整体覆盖、其余数据集合并，`api_key` 不迁移 |
 | Web 应用 | ✅ | `apps/web`：Vite + React 单页壳，复用 `@synapse/core`，**IndexedDB 异步存储**（内存镜像 + 防抖写回，自动从 localStorage 迁移旧数据）、离线规则模式、资料/课程表/作业/计划/复习/仪表盘均可用 |
-| 桌面应用 | ⏳ | Tauri 壳、文件系统 KV 适配器和旧 SQLite 迁移器尚未实现 |
+| 桌面应用 | ✅ | `apps/desktop`：Tauri 2 壳，前端直接复用 `apps/web` 的构建产物；Rust 侧提供文件 KV（`kv_load` / `kv_set` / `kv_remove`）和 `http_request` 代理（`ureq` + `rustls`，绕开浏览器 CORS），Web 壳按运行环境自动切换到 Tauri 适配器。当前仅通过编译级校验（`cargo check`），尚未出安装包 |
 | Android 应用 | ⏳ | Tauri Mobile / Kotlin 薄壳均未实现 |
 | HTTP/SSE 服务端 | ⏳ | 协议可映射为 HTTP，但当前只有进程内调用，不提供服务器 |
 | 向量检索 | ⏳ | 没有 embedding 模型、向量库或语义召回 |
@@ -231,15 +243,15 @@ core 通过接口而不是平台全局 API 获取外部能力。替换实现时�
 | 扩展点 | 当前实现 | 可以替换为 | 主要位置 |
 | --- | --- | --- | --- |
 | LLM | `DeepSeekLlmProvider` / 离线规则 provider | 其他 OpenAI 兼容模型、云开发 AI、本地模型 | `providers/contracts.ts`、`providers/build.ts` |
-| 网络 | 小程序 `Taro.request` | Web `fetch`、Tauri HTTP、Node HTTP | `ports/HttpTransport` |
+| 网络 | 小程序 `Taro.request` / Web `fetch`（Tauri 下自动改走 Rust 侧 `http_request` 代理） | Node HTTP、其他平台原生请求 | `ports/HttpTransport`、`apps/web/src/adapters/httpTransport.ts` |
 | 流式传输 | DeepSeek SSE 协议 | 小程序 chunked、Web SSE、WebSocket | `ports/StreamTransport` |
-| 存储 | 小程序 `Taro.storage`（同步）/ Web IndexedDB（异步，经 `CachedKvStore` 镜像） | Tauri fs、SQLite、云 KV | `storage/kv.ts`（`KvStore` + `KvBackend` + `CachedKvStore`）、壳 `adapters/` |
-| 资料提取 | core 内置 TXT 解码 | 注入 pdf.js、OCR、Office 转文本 | `ports/FileExtractor`、`application/fileExtract.ts` |
+| 存储 | 小程序 `Taro.storage`（同步）/ Web IndexedDB（异步，经 `CachedKvStore` 镜像）/ 桌面 Rust 文件 KV | SQLite、云 KV | `storage/kv.ts`（`KvStore` + `KvBackend` + `CachedKvStore`）、壳 `adapters/` |
+| 资料提取 | core 内置 TXT 解码；壳注入 pdf.js（PDF）与 mammoth（Web 的 docx） | OCR、其他 Office 格式、云端解析 | `ports/FileExtractor`、`application/fileExtract.ts` |
 | 检索 | 本地知识图谱 + BM25 | embedding、远程搜索、混合排序 | `RetrievalProvider`、`domain/bm25.ts` |
 | 日历 | mock 截止日期提示 | 系统日历、课程平台 API | `CalendarProvider` |
 | 通知 | mock 文案 | 微信订阅消息、系统通知 | `NotifierProvider` |
 | 时间与 ID | 小程序真实时间 + UUID v4 风格随机 ID | 服务端时间、确定性 ID、平台安全随机源 | `ports/Clock`、`ports/IdGen` |
-| UI 壳 | Taro 微信小程序 | React Web、Tauri、Tauri Mobile/Kotlin WebView | 新建 `apps/*`，复用 `@synapse/core` |
+| UI 壳 | Taro 微信小程序 + React Web + Tauri 桌面（三个壳已落地） | Tauri Mobile / Kotlin WebView | 新建 `apps/*`，复用 `@synapse/core` |
 
 ### 扩展新模型
 
@@ -305,15 +317,15 @@ npm run typecheck
 | --- | --- | --- | --- |
 | 语言 | TypeScript | ^5.6（strict） | 全仓库唯一语言 |
 | 包管理 | npm workspaces | — | monorepo，`packages/*` + `apps/*` |
-| 测试 | Vitest | ^3.0 | 144 个测试，含边界与压力测试 |
+| 测试 | Vitest | ^3.0 | 203 个测试，含边界与压力测试 |
 | 核心 | 纯 TypeScript | — | `@synapse/core`，**零运行时依赖** |
 | 小程序壳 | Taro | 4.1.9 | React 18 + SCSS Modules，微信小程序为主 |
 | Web 壳 | Vite + React | ^5.4 / ^18 | `apps/web`，浏览器单页，直接复用 core |
+| 桌面壳 | Tauri | 2 | `apps/desktop`：复用 Web 构建产物，Rust 侧代发 HTTP（`ureq`）与文件 KV |
 | PDF 解析 | pdfjs-dist | ^6.3 | 两端各自注入 `ports/FileExtractor`：Web 走动态 import + 本地 CMap 目录；小程序走 legacy 构建 + 主线程 fake worker，文件放在资料库分包里（`scripts/copy-pdfjs-vendor.mjs` 生成，不入库） |
-| UI | React | ^18 | 函数组件 + Hooks |
-| 状态 | Zustand | ^4.5 | 页面级状态 |
-| 工具库（壳） | dayjs / classnames | ^1.11 / ^2.5 | 仅壳内使用，不进 core |
-| 构建 | Webpack | 5.91.0 | 由 Taro 驱动 |
+| docx 解析 | mammoth | ^1.13 | **仅 Web 端**：动态 import 解析 `.docx` 纯文本，同样不进主包；小程序端暂不支持 docx |
+| UI | React | ^18 | 函数组件 + Hooks（未引入状态管理库，页面级状态用 `useState` / `useMemo`） |
+| 构建 | Webpack / Vite | 5.91.0 / 5.4 | 小程序由 Taro 驱动；Web 由 Vite 驱动 |
 | 模型接入 | DeepSeek（OpenAI 兼容） | — | `POST {base_url}/chat/completions`，Bearer 认证 |
 | 本地存储 | KV 抽象 | — | 小程序走 `Taro.storage`（同步），Web 走 IndexedDB（异步，用 `CachedKvStore` 做内存镜像） |
 | 平台配置 | `miniprogram-ci` | ^2.1.26 | 小程序上传/预览 |
@@ -335,17 +347,18 @@ SynapseNext/
 │       │   ├── ports/            # 端口定义：core 访问平台的唯一出口
 │       │   ├── providers/        # LLM / 检索 / 日历 / 通知 适配器
 │       │   └── storage/          # KV 之上的运行时存储（含键空间）
-│       └── test/                 # 9 个测试文件，161 个用例（含 security.spec.ts / storage.spec.ts）
+│       └── test/                 # 15 个测试文件，203 个用例（含 security / storage / kvLayout / search 等）
 ├── apps/
 │   ├── miniprogram/              # Taro 微信小程序壳
 │       └── src/
 │           ├── adapters/         # 端口实现：HttpTransport / KvStore / FileExtractor 插座 / pdf 兼容层 / 系统日历
 │           ├── vendor/core/      # core 的同步副本（脚本生成，勿手改）
-│           ├── pages/            # 8 个主包页面（3 个 Tab + 启动/二级/实验页）
+│           ├── pages/            # 10 个主包页面（3 个 Tab + 启动 / 二级 / 实验页）
 │           ├── packageDocuments/ # 资料库分包：页面 + pdf.js 实现 + 构建产物 vendor（不入库）
 │           ├── components/       # 计划、积木计划、澄清卡片
 │           └── services/         # 壳侧封装，对接 vendor/core
-│   └── web/                      # Vite + React Web 壳（IndexedDB 异步存储）
+│   ├── web/                      # Vite + React Web 壳（IndexedDB 异步存储）
+│   └── desktop/                  # Tauri 2 桌面壳（Rust 侧文件 KV + HTTP 代理，复用 Web 构建产物）
 └── scripts/                      # sync-core-to-miniprogram / check-vendor-imports
 ```
 
@@ -430,23 +443,25 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 | 键 | 内容 |
 | --- | --- |
-| `profile` | 用户资料，含 `api_key` |
-| `conversations` | 会话列表 |
+| `profile` | 用户资料（按 userId 分桶的一张表，多档案就存在这里）；含 `api_key` |
+| `conversations` | 会话列表（单键，按 userId 过滤） |
 | `messages:{conversationId}` | 消息明细 |
-| `clarifications` | 待澄清会话 |
+| `clarifications` | 待澄清会话 + AI 记忆（memories） |
 | `assessments:default` | 评估记录 |
 | `plans:{userId}` | 当前短期计划 |
 | `plan_versions:{userId}` | 计划历史版本（保留最近 30 版） |
 | `subjects:{userId}` | 科目注册表（跨对话保留） |
 | `long_plan:{userId}` | 长期计划与里程碑 |
 | `today:{userId}` | 今日待办（含未完成顺延） |
-| `review:{userId}` | 间隔重复复习队列 |
+| `review:{userId}` | 间隔重复复习队列（苏格拉底提示缓存在卡片的 `hint_texts` 字段上） |
 | `progress:{userId}` | 任务打卡进度 |
-| `documents:{userId}` | 导入的资料（含科目/标签/来源/字数等元数据与图谱、复习卡回填 ID） |
+| `error_book:{userId}` | 错题本（含科目 / 知识点 / 题干 / 你的答案 / 正确答案 / 来源 / 日期） |
+| `doc_index:{userId}` + `doc:{userId}:{docId}` | 导入资料：**索引键 + 逐条键**，改一份只写一个键（旧布局 `documents:{userId}` 在读取侧自动迁移） |
 | `assignments:{userId}` | 作业清单（含截止日、数量、估时、状态、复习卡回填 ID） |
 | `timetable:{userId}` | 课程表 |
 | `reports:{userId}` | 学情周报（含离线统计与叙述，保留最近 8 期） |
-| `kg:nodes` / `kg:edges` | 知识图谱（全部来自资料构建；没有任何内置种子，新装为空） |
+| `kg:node_index:{userId}` + `kg:node:{userId}:{nodeId}` | 图谱节点：索引 + 逐条（旧 `kg:nodes` 在读取侧自动迁移） |
+| `kg:edge_index:{userId}` + `kg:edge:{userId}:{edgeId}` | 图谱边：索引 + 逐条（同上，旧 `kg:edges`） |
 
 ---
 
@@ -513,9 +528,15 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 | --- | --- | --- |
 | domain 行为 | `test/domain.spec.ts` | 规则计划 / 积木计划的输入矩阵与边界（空目标、单日、极短时长、非法分钟数） |
 | 端到端流程 | `test/httpFlow.spec.ts` | health / 设置 / 图谱摘要 / 画像 / 会话 CRUD / run（自由与积木）/ SSE 事件流 / 计划落库 |
-| 新增特性 | `test/v2Features.spec.ts` | 课程表、多科目、资料构图、复习、周报、作业、掌握度等 v2 行为 |
+| v2 特性 | `test/v2Features.spec.ts` | 课程表、多科目、资料构图、复习、周报、作业、掌握度等 v2 行为（文件最大的一个） |
 | 压力与幂等 | `test/stress.spec.ts` | 并发构图、百节点检索、计划版本裁剪、清空后图谱归零 |
 | 抽取质量 | `test/assignmentEval.spec.ts` | 作业抽取准确率（截止日 / 数量 / 科目）量化 |
+| 测验与错题本 | `test/quizErrorBook.spec.ts` | 题目解析与离线判分、错题去重入本并进复习队列、无模型时诚实失败 |
+| 全局搜索 | `test/search.spec.ts` | 资料 / 错题 / 会话三路检索、正文命中给片段、会话扫描上限 |
+| 数据可迁移性 | `test/dataPortability.spec.ts` | 导出→导入往返与安全边界、AI 记忆可见可删、多档案、图谱按档案隔离、学习趋势 |
+| KV 布局 | `test/kvLayout.spec.ts` | 分键存储「改一条只写一个键」、旧布局读侧迁移、图谱追加 |
+| 检索与导入 | `test/retrieval.spec.ts` · `test/ingest.spec.ts` | 混合检索（科目加成 / 去重 / 重排解析）、ICS 课表导入、docx 提取路由 |
+| 存储与安全 | `test/storage.spec.ts` · `test/security.spec.ts` | `CachedKvStore` 读写；原型污染、脏存储回落、写入封顶、失败信息不回显密钥 |
 | 架构边界 | `test/boundary.spec.ts` | core 不得 import Node 内置模块、DOM、wx、Tauri API |
 | 外部依赖 | `test/deepseek.spec.ts` | DeepSeek 请求组装、SSE 解析与错误分支 |
 
@@ -523,10 +544,11 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 | 门禁 | 命令 | 现状 |
 | --- | --- | --- |
-| 单元 + 流程 + 压力测试 | `npm test` | 161/161 通过 |
+| 单元 + 流程 + 压力测试 | `npm test` | 203/203 通过 |
 | 类型检查 | `npm run typecheck` | 通过（core + 小程序壳 + Web） |
 | core 边界规则 | 含在 `npm test` | 通过 |
-| vendor 边界校验 | `npm run check:vendor` | 通过（对外名 199 个） |
+| vendor 边界校验 | `npm run check:vendor` | 通过（对外名 263 个） |
+| CI 门禁 | `.github/workflows/ci.yml` | `verify`：typecheck → test → `sync:core` → vendor 无漂移（`git diff --exit-code`）→ 两端构建；`desktop`：`cargo check` |
 
 ### 改行为时的约定
 
@@ -550,7 +572,7 @@ core 不碰数据库，所有持久化都落在 `KvStore` 的键上（[runtimeSt
 
 ```bash
 npm install                           # 拉依赖（node_modules 不入库，clone 后必跑）
-npm test                              # 全仓测试（当前 144 个）
+npm test                              # 全仓测试（当前 203 个）
 npm run test:stress --workspace @synapse/core # 单独运行 core 压力测试
 npm run typecheck                     # 全仓类型检查（core + 小程序壳 + Web）
 npm run sync:core                     # core → 小程序 vendor（增量覆盖 + 校验）
@@ -561,6 +583,8 @@ npm run preview --workspace @synapse/web  # 本地预览构建产物
 npm run e2e --workspace @synapse/web      # Web 端到端冒烟测试（Playwright/Chromium，先起 dev server）
 npm run dev:weapp   --workspace taro_template # 小程序：监听 src 变化持续重新构建 dist/
 npm run build:weapp --workspace taro_template # 小程序：一次性构建（改完源码想看效果时用）
+npm run dev   --workspace @synapse/desktop    # 桌面端：tauri dev（先跑一次 Web 构建，frontendDist 指向 apps/web/dist）
+npm run build --workspace @synapse/desktop    # 桌面端：tauri build（当前 bundle.active=false，只编译不出安装包）
 ```
 
 小程序页面的改动**必须在构建后才会生效**：微信开发者工具读的是 `apps/miniprogram/project.config.json` 里 `miniprogramRoot: "dist/"` 指向的产物，直接改 `src/` 而没跑上面两条命令之一，工具里看到的还是上一次构建的旧页面。日常开发挂 `dev:weapp`（自动重建），只是偶尔看一眼就跑 `build:weapp`，然后在开发者工具里点「编译」刷新。
@@ -585,9 +609,9 @@ PDF 抽取用 `pdfjs-dist`，由 `apps/web/scripts/copy-pdfjs-cmaps.mjs` 在 `pr
 
 | 平台 | 状态 |
 | --- | --- |
-| 微信小程序（Taro） | 已交付主链路及资料结构化 / 批量导入 / **PDF 抽取（资料库分包）** / 一键学习化 / Canvas 图谱（掌握度着色）/ 作业清单（逾期风险标）/ 复习苏格拉底提示 / 学情周报 / AI 依据展开 / 仪表盘 / 数据导出 / 对话流式等待与逐字渲染 / 三科完整闭环演示数据；「我的」页与 Web 同构；微信原生交互仍需真机验收，云开发 AI 仅自检 |
-| Web（Vite + React） | 已交付主链路及资料结构化 / 批量导入 / PDF 抽取 / 一键学习化 / SVG 图谱（掌握度着色、力导向动画、按学科分簇）/ 作业清单（逾期风险标、作业包二维码）/ 复习苏格拉底提示 / 学情周报 / AI 依据展开 / 仪表盘 / JSON 导出 / 对话流式等待与逐字渲染 / 三科完整闭环演示数据，复用同一份 `@synapse/core`，39 条 e2e 通过 |
-| 桌面（Tauri） | 待做 |
+| 微信小程序（Taro） | 已交付主链路及资料结构化 / 批量导入 / **PDF 抽取（资料库分包）** / 一键学习化 / Canvas 图谱（掌握度着色）/ 作业清单（逾期风险标）/ 错题本与 AI 自测 / 复习苏格拉底提示 / 学情周报 / 学习趋势 / 全局搜索 / AI 依据展开 / 仪表盘 / 数据导出与导入 / 对话流式等待与逐字渲染 / 三科完整闭环演示数据；「我的」页与 Web 同构；微信原生交互仍需真机验收，云开发 AI 仅自检 |
+| Web（Vite + React） | 已交付主链路及资料结构化 / 批量导入 / **PDF 与 docx 抽取** / 一键学习化 / SVG 图谱（掌握度着色、力导向动画、按学科分簇）/ 作业清单（逾期风险标、作业包二维码）/ 错题本与 AI 自测 / 复习苏格拉底提示 / 学情周报 / 学习趋势 / 全局搜索 / AI 依据展开 / 仪表盘 / JSON 导出与导入 / 对话流式等待与逐字渲染 / 三科完整闭环演示数据，复用同一份 `@synapse/core`，40 条 e2e |
+| 桌面（Tauri 2） | 已有 `apps/desktop` 壳：复用 Web 构建产物，Rust 侧提供文件 KV 与 HTTP 代理（绕开 CORS）。当前仅通过编译级校验（CI 里的 `cargo check`），未出安装包（`bundle.active=false`），未做过有 GUI 环境的实跑 |
 | Android | 待做 |
 
 新增平台只需要：实现 `adapters/` 里的几个端口 + 写 UI。core 直接复用。

@@ -1,14 +1,22 @@
 import { test, expect } from '@playwright/test'
 import { onboard } from './helpers'
 
+/**
+ * 课程表页有两个 textarea：ICS 导入（占位符「或把 ICS 文本粘贴到这里…」）
+ * 与「从教务系统粘贴课表」。这里按卡片标题定位后者，避免 `.mine-textarea` 命中两个。
+ */
+function pasteBox(page: import('@playwright/test').Page) {
+  return page.locator('.mine-card', { hasText: '从教务系统粘贴课表' }).locator('.mine-textarea')
+}
+
 test.describe('课程表', () => {
   test('粘贴解析 → 保存 → 我的页显示数量', async ({ page }) => {
     await onboard(page)
     await page.locator('.nav-item', { hasText: '课程表' }).click()
 
-    await page
-      .locator('.mine-textarea')
-      .fill('周一 高等数学 08:00-09:40\n周一 大学物理 10:00-11:40\n周三 线性代数 14:00-15:40')
+    await pasteBox(page).fill(
+      '周一 高等数学 08:00-09:40\n周一 大学物理 10:00-11:40\n周三 线性代数 14:00-15:40',
+    )
     await page.getByRole('button', { name: '解析这段文本' }).click()
 
     await expect(page.locator('.tt-entry').first()).toBeVisible({ timeout: 15_000 })
@@ -40,9 +48,7 @@ test.describe('课程表', () => {
     await onboard(page)
     await page.locator('.nav-item', { hasText: '课程表' }).click()
 
-    await page
-      .locator('.mine-textarea')
-      .fill('周一 高等数学 第1-2节\n周三 线性代数 第3-4节 1-16周')
+    await pasteBox(page).fill('周一 高等数学 第1-2节\n周三 线性代数 第3-4节 1-16周')
     await page.getByRole('button', { name: '解析这段文本' }).click()
 
     await expect(page.locator('.tt-entry').first()).toBeVisible({ timeout: 15_000 })

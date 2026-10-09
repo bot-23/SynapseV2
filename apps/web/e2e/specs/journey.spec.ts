@@ -81,6 +81,8 @@ test.describe('完整用户旅程', () => {
     const graphEntry = page.getByRole('button', { name: /知识图谱/ })
     await expect(graphEntry).toContainText('全部由你的资料构建')
     await graphEntry.click()
+    // 图谱页是懒加载路由：先等节点真的渲染出来再数，否则数到的是 Suspense 占位
+    await expect(page.locator('.graph-node').first()).toBeVisible({ timeout: 15_000 })
     // 三科资料都构过图，节点数远多于空图谱
     expect(await page.locator('.graph-node').count()).toBeGreaterThan(5)
 

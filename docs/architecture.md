@@ -1,6 +1,6 @@
 # Synapse 三层架构设计（TypeScript 核心）
 
-> 状态：已确认核心决策，P0 进行中。旧仓 `../Synapse` 保持可用，本目录独立演进，行为对齐后逐端切换。
+> 状态：本文的架构决策已全部落地。Web、微信小程序、桌面（Tauri 2）三个壳已交付（桌面端目前为编译级验证），Android 仍待做。本文件保留为**架构决策记录**；当前实现进度、功能清单与测试数字以 [README](../README.md) 为准，不在此重复维护。
 
 ## 0. 决策记录
 
@@ -72,7 +72,7 @@ SynapseNext/
       test/
   apps/
     web/                      Web 壳（React/Vite，UI 从旧仓 frontend/studygg 迁移）
-    desktop/                  Tauri 2 壳（复用 apps/web 构建产物 + fs 存储适配器）
+    desktop/                  Tauri 2 壳（复用 apps/web 构建产物 + Rust 文件 KV + HTTP 代理）— 已落地
     android/                  Tauri Mobile（首选）或 Kotlin WebView 薄壳（回退）
     miniprogram/              小程序壳（P6 阶段）
   docs/
@@ -128,19 +128,24 @@ providers 实现 / storage 实现（依赖契约与 ports，由组装处注入�
 **键空间分桶**（杜绝"一个大 JSON"）：
 
 ```text
-profile                         用户画像/API Key（单键）
-conversations                   会话清单（单键，按 updated 排序）
+profile                         用户画像/API Key（按 userId 分桶的一张表，多档案就在这里）
+conversations                   会话清单（单键，按 userId 过滤）
 messages:{conversationId}       每会话消息一桶，按需加载
-clarifications:{conversationId} 待确认会话
-plans:{userId}                  已保存计划（v2 起含 version / change_summary / updated_at）
-progress:{yyyy-mm}              进度快照按月分桶
-assessments:{yyyy-mm}           能力评估按月分桶
-timetable:{userId}              课程表条目（v2）
-kg:nodes / kg:edges             知识图谱（无内置内容：新装为空，全部由资料构建）
+clarifications                  待确认会话 + AI 记忆（memories）
+plans:{userId}                  已保存计划（含 version / change_summary / updated_at）
+progress:{userId}               任务打卡进度
+assessments:default             能力评估快照
+timetable:{userId}              课程表条目
+error_book:{userId}             错题本
+doc_index:{userId} + doc:{userId}:{docId}          资料：索引键 + 逐条键（改一份只写一个键）
+kg:node_index:{userId} + kg:node:{userId}:{nodeId} 图谱节点：索引键 + 逐条键
+kg:edge_index:{userId} + kg:edge:{userId}:{edgeId} 图谱边：索引键 + 逐条键
 ```
 
+> 完整键空间（含 `plan_versions` / `subjects` / `long_plan` / `today` / `review` / `assignments` / `reports`）见 [README §5 存储：KV 键空间](../README.md#5-存储kv-键空间)。资料与图谱早期是「单键装整数组」，现已拆成索引 + 逐条，旧布局在读取侧自动迁移。
+
 - 查询模式全部按键取数（无全文搜索、无关联查询），KV 完全覆盖；SQL 优势本就用不到。
-- 适配器（每个约 50 行，零原生代码）：desktop → Tauri fs 插件 JSON 文件；android → WebView IndexedDB/localStorage；web 开发 → IndexedDB 或内存；miniprogram → wx.storage。
+- 适配器（零原生代码）：desktop → Rust 侧文件 KV 命令（已交付）；web → IndexedDB（`CachedKvStore` 异步镜像 + 防抖写回，已交付）；miniprogram → `wx.storage`（已交付）；android → 待定。
 - 数据增长：重度用户约几十 MB/年（主要是 messages），分桶 + 按需加载可覆盖；真超预期时给单平台补写 SQLite 适配器，核心零改动——接口即保险。
 - 小程序 wx.storage 上限 10MB 是真正的天花板，P6 评估保留/归档策略（产品决策，可后议）。
 - 旧数据迁移：桌面/安卓首启一次性自动迁移 `synapse.db` → KV；转换器随壳发布，迁移成功后备份旧库文件（不删除），迁移结果校验记录数并抽样比对。
@@ -168,14 +173,16 @@ kg:nodes / kg:edges             知识图谱（无内置内容：新装为空，
 | P0 | 本文档确认；从旧仓提取接口基线/黄金样本（假 Key、假 LLM） | 基线样本入 `baseline/`，可重复执行 | 已完成，**后已退休**：`baseline/` 与逐字比对的 `httpBaseline.spec.ts` 已删除，改用仓库内分层测试固定行为 |
 | P1 | packages/core 骨架；domain 翻译；单测对齐旧行为 | domain 用例输出与 Python 版逐字一致 | 已完成（rule/block plans 翻译，`domain.spec.ts` 18 条行为用例 + typecheck 通过） |
 | P2 | application/providers/storage/ports 翻译；DeepSeek 直连（假 transport 断言 URL/认证/消息体） | core 全量单测通过；无真实模型调用 | 已完成（`httpFlow.spec.ts` 覆盖 health/画像/会话/run/SSE/计划落库，外加 deepseek 假 transport + 边界规则；typecheck 通过） |
-| P3 | apps/web 接入：UI 迁移、services 改进程内调 core | 现有 Web 功能人工清单回归通过 | 未开始 |
-| P4 | desktop（Tauri）接入 + KV fs 适配器 + `synapse.db` 自动迁移验证 | 桌面构建通过；旧数据迁移后完整可读 | 未开始 |
+| P3 | apps/web 接入：UI 迁移、services 改进程内调 core | 现有 Web 功能人工清单回归通过 | 已完成：Vite + React 单页壳，进程内直调 core，IndexedDB 异步存储（`CachedKvStore` 内存镜像 + 防抖写回），40 条 Playwright e2e |
+| P4 | desktop（Tauri）接入 + KV fs 适配器 + `synapse.db` 自动迁移验证 | 桌面构建通过；旧数据迁移后完整可读 | 部分完成：`apps/desktop` 的 Tauri 2 壳、Rust 侧文件 KV（`kv_load`/`kv_set`/`kv_remove`）与 HTTP 代理（`http_request`，绕开 CORS）均已落地；仅编译级验证，未出安装包。**旧 SQLite 迁移不再需要**——存储方案早已砍掉 SQLite 改用 KV，没有旧库可迁 |
 | P5 | android：首选 Tauri Mobile 收敛，失败回退 Kotlin 薄壳；真机验收 | 冷/热启动、聊天、上传无回归；验证启动超时消失 | 未开始 |
-| P6 | miniprogram + wx 适配器（storage/http/PDF/流式验证） | 小程序内完成核心流程冒烟 | 已按 v2 范围重做（见 §0.1）：引导页 + 会话列表 + 科目分组计划 + 课程表导入；38 个 core 测试 + typecheck 通过。PDF 提取与流式仍为未做项 |
+| P6 | miniprogram + wx 适配器（storage/http/PDF/流式验证） | 小程序内完成核心流程冒烟 | 已完成且大幅超出原范围（见 §0.1）：引导 / 对话 / 计划 / 我的 / 历史会话 / 课程表 / 资料库分包 / 作业 / 错题 / 图谱 / 云开发自检；PDF 走资料库分包，主包约 0.8MB。**仅 token 级流式仍未做**，stage 进度 + 逐字渲染已交付 |
 
 每阶段完成即停，交接后再进入下一阶段；任何协议/语义变化立即停止并回退。
 
 ## 9. 明确不做的事
+
+> 以下是 **P0 平移期**的约束，用于保证从旧 Python 仓迁过来时行为逐字对齐。后续 v2 迭代已按产品要求放开功能范围（见 §0.1 与 [README](../README.md) 的功能全景），本节的「不新增产品功能 / 不改数据模型」不再作为当前约束。
 
 - 不引入服务器、云函数、微服务。
 - 不重新设计 UI/交互，不新增产品功能。
